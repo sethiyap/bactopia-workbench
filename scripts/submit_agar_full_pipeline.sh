@@ -232,10 +232,9 @@ use_porechop=${use_porechop_override:-${USE_PORECHOP:-}}
 
 # Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
 # Precedence: --genome-size flag > GENOME_SIZE (site config / env) > unset. When unset
-# it is left empty and the per-input-type default is applied in run_bactopia_batch.pbs:
-# ONT defaults to 1 (disables the coverage gate; Bactopia 3.2.0 has no auto-estimate),
-# while short-read/assembly input falls back to 5 Mb. Empty and 0 are both falsy to
-# Bactopia and are resolved to a real integer there before the job runs.
+# it is left empty and run_bactopia_batch.pbs falls back to 5 Mb. Bactopia 3.2.0 has
+# no auto-estimate and falsy-checks the value, so empty and 0 are both resolved to a
+# real integer there before the job runs: 0 disables the coverage gate (passed as 1).
 if [[ -n $genome_size_override ]]; then
   genome_size=$genome_size_override
 elif [[ -n ${GENOME_SIZE:-} ]]; then
