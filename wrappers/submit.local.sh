@@ -27,8 +27,9 @@ Options:
   --ont-minqual N               Minimum average ONT read quality passed to Bactopia
   --use-porechop yes|no         Enable or disable Bactopia Porechop for ONT reads
   --genome-size N               Expected genome size (bp); drives Bactopia's coverage
-                                QC gate (min basepairs = N x 10). 0 = auto-estimate per
-                                sample. Default: auto-estimate for ONT, 5 Mb otherwise.
+                                QC gate (min basepairs = N x 10). 1 disables the gate
+                                (Bactopia 3.2.0 has no auto-estimate). Default: 1 for
+                                ONT (gate off, assemblies provisional), 5 Mb otherwise.
   --dry-run                    Validate config, inputs, and dependencies without running jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF

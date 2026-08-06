@@ -121,19 +121,25 @@ if [[ $BACTOPIA_INPUT_MODE == "ont" ]]; then
 fi
 
 # Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
-# Only pass --genome_size when a real positive size is supplied. When it is unset or
-# 0, omit the flag so Bactopia estimates each sample's genome size -- passing
-# "--genome_size 0" makes Bactopia compute 10*0 and abort with an unbound variable,
-# and omitting the flag is the only way to request auto-estimation. Short-read and
-# assembly input keep the historical 5 Mb default when no size is supplied.
-GENOME_SIZE_ARGS=()
-if [[ $GENOME_SIZE == "0" ]]; then
-  : # explicit auto-estimate: omit --genome_size so Bactopia estimates per sample
-elif [[ -n $GENOME_SIZE ]]; then
-  GENOME_SIZE_ARGS+=(--genome_size "$GENOME_SIZE")
-elif [[ $BACTOPIA_INPUT_MODE != "ont" ]]; then
-  GENOME_SIZE_ARGS+=(--genome_size 5000000)
+# Bactopia 3.2.0 has NO auto-estimate and NO default for genome_size: it must reach
+# Bactopia as a truthy integer, or the QC module interpolates a null and aborts the
+# job with "null: unbound variable". An empty value AND 0 are both falsy and trigger
+# that crash, so they are resolved to a concrete size here before Bactopia sees it:
+#   - an explicit positive size is passed through (real coverage gate);
+#   - ONT with no size defaults to 1, matching Bactopia's teton/clean-yer-reads
+#     profiles: 10 x 1 = 10 bp effectively disables the coverage gate so shallow ONT
+#     data still assembles. Treat such assemblies as provisional and pass
+#     --genome-size N (e.g. 6300000 for P. aeruginosa) for a real gate;
+#   - short-read/assembly input keeps the historical 5 Mb default.
+if [[ -z $GENOME_SIZE || $GENOME_SIZE == "0" ]]; then
+  if [[ $BACTOPIA_INPUT_MODE == "ont" ]]; then
+    GENOME_SIZE=1
+    echo "GENOME_SIZE unset for ONT input; defaulting to 1 (coverage gate disabled). Pass --genome-size N for a real coverage gate." >&2
+  else
+    GENOME_SIZE=5000000
+  fi
 fi
+GENOME_SIZE_ARGS=(--genome_size "$GENOME_SIZE")
 
 printf 'Bactopia input mode: %s\n' "$BACTOPIA_INPUT_MODE"
 printf 'Bactopia input manifest: %s\n' "$SAMPLESHEET"
