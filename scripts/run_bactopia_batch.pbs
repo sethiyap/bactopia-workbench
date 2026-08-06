@@ -32,7 +32,7 @@ DATASETS_CACHE=${DATASETS_CACHE:-/g/data/${PROJECT}/bactopia_datasets_custom}
 SING_CACHE=${SING_CACHE:-/scratch/${PROJECT}/${USER_NAME}/singularity_cache}
 
 # Optional Bactopia arguments.
-GENOME_SIZE=${GENOME_SIZE:-5000000}
+GENOME_SIZE=${GENOME_SIZE:-}
 EXTRA_ARGS_STRING=${EXTRA_ARGS_STRING:-}
 BACTOPIA_INPUT_MODE=${BACTOPIA_INPUT_MODE:-illumina}
 MEDAKA_ROUNDS=${MEDAKA_ROUNDS:-}
@@ -120,6 +120,21 @@ if [[ $BACTOPIA_INPUT_MODE == "ont" ]]; then
   [[ $USE_PORECHOP == "1" ]] && ONT_ARGS+=(--use_porechop)
 fi
 
+# Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
+# Only pass --genome_size when a real positive size is supplied. When it is unset or
+# 0, omit the flag so Bactopia estimates each sample's genome size -- passing
+# "--genome_size 0" makes Bactopia compute 10*0 and abort with an unbound variable,
+# and omitting the flag is the only way to request auto-estimation. Short-read and
+# assembly input keep the historical 5 Mb default when no size is supplied.
+GENOME_SIZE_ARGS=()
+if [[ $GENOME_SIZE == "0" ]]; then
+  : # explicit auto-estimate: omit --genome_size so Bactopia estimates per sample
+elif [[ -n $GENOME_SIZE ]]; then
+  GENOME_SIZE_ARGS+=(--genome_size "$GENOME_SIZE")
+elif [[ $BACTOPIA_INPUT_MODE != "ont" ]]; then
+  GENOME_SIZE_ARGS+=(--genome_size 5000000)
+fi
+
 printf 'Bactopia input mode: %s\n' "$BACTOPIA_INPUT_MODE"
 printf 'Bactopia input manifest: %s\n' "$SAMPLESHEET"
 
@@ -127,13 +142,15 @@ BACTOPIA_CMD=(
   nextflow run "$BACTOPIA_PIPELINE"
   "${INPUT_ARGS[@]}"
   --datasets_cache "$DATASETS_CACHE"
-  --genome_size "$GENOME_SIZE"
   --outdir results_main
   -profile singularity
   -work-dir "$NXF_WORK"
   -c "$NEXTFLOW_CONFIG"
   -resume
 )
+if [[ ${#GENOME_SIZE_ARGS[@]} -gt 0 ]]; then
+  BACTOPIA_CMD+=("${GENOME_SIZE_ARGS[@]}")
+fi
 if [[ ${#ONT_ARGS[@]} -gt 0 ]]; then
   BACTOPIA_CMD+=("${ONT_ARGS[@]}")
 fi

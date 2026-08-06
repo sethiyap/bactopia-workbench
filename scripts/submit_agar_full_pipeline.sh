@@ -231,16 +231,15 @@ ont_minqual=${ont_minqual_override:-${ONT_MINQUAL:-}}
 use_porechop=${use_porechop_override:-${USE_PORECHOP:-}}
 
 # Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
-# Precedence: --genome-size flag > GENOME_SIZE (site config / env) > per-input-type
-# default. ONT defaults to 0 so Bactopia estimates each sample's genome size instead
-# of assuming a fixed 5 Mb; other input types stay empty so run_bactopia_batch.pbs
-# applies its own fallback. A value of 0 is valid (auto-estimate) and passes through.
+# Precedence: --genome-size flag > GENOME_SIZE (site config / env) > unset. When unset
+# it is left empty and the per-input-type default is applied in run_bactopia_batch.pbs:
+# ONT omits --genome_size so Bactopia estimates each sample's size, while other input
+# types fall back to 5 Mb. (Passing "--genome_size 0" makes Bactopia abort, so 0 is
+# treated the same as unset -- auto-estimate -- rather than forwarded.)
 if [[ -n $genome_size_override ]]; then
   genome_size=$genome_size_override
 elif [[ -n ${GENOME_SIZE:-} ]]; then
   genome_size=$GENOME_SIZE
-elif [[ $input_type == "ont" ]]; then
-  genome_size=0
 else
   genome_size=
 fi
