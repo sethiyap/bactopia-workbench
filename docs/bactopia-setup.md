@@ -156,16 +156,37 @@ Run `--dry-run` after changing the path — the launcher verifies `DATASETS_CACH
 exists before submitting
 ([submit_agar_full_pipeline.sh:604](../scripts/submit_agar_full_pipeline.sh#L604)).
 
-### Build your own instead
+### Where the datasets come from (other than the AGAR bundle)
 
-If you would rather build the cache from scratch, use the Bactopia CLI:
+The AGAR custom bundle is just a **pre-packaged snapshot** of Bactopia's standard
+datasets. You don't have to use it — Bactopia can download/build the same cache
+from the upstream sources with its own `bactopia datasets` subcommand:
 
 ```bash
-conda activate bactopia
+conda activate bactopia          # needs the Bactopia conda package (step 2)
 bactopia datasets --help
+# builds the cache; then point DATASETS_CACHE at the directory it produces
 ```
 
-then point `DATASETS_CACHE` at the directory it produces.
+`bactopia datasets` fetches these components from their maintainers (the same
+pieces the AGAR bundle contains — `mash-refseq*.msh`, `gtdb-*.json.gz`,
+`mlst.tar.gz`, `amrfinderplus.tar.gz`):
+
+- **Mash sketch of NCBI RefSeq** (species / genome-size estimation) —
+  [NCBI RefSeq](https://www.ncbi.nlm.nih.gov/refseq/)
+- **Sourmash signature over GTDB / GenBank** (taxonomic classification) —
+  [GTDB](https://gtdb.ecogenomic.org/), [sourmash databases](https://sourmash.readthedocs.io/en/latest/databases.html)
+- **AMRFinderPlus database** (AMR genes/mutations) —
+  [NCBI AMRFinderPlus](https://www.ncbi.nlm.nih.gov/pathogens/antimicrobial-resistance/AMRFinder/)
+- **MLST schemes** — [PubMLST](https://pubmlst.org/)
+
+Background on the datasets system: the
+[Bactopia datasets docs](https://bactopia.github.io/v2.2.0/datasets/) (the v3
+`bactopia datasets` command supersedes the older workflow). Whichever way you
+obtain the cache, point `DATASETS_CACHE` at it.
+
+> Note: the **Kraken2/Bracken database is separate** — it is not part of this
+> cache. See the next section.
 
 ## 4. Kraken2 / Bracken Database (`KRAKEN2_DB`)
 
