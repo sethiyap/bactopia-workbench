@@ -139,6 +139,7 @@ medaka_model_override=
 ont_minlength_override=
 ont_minqual_override=
 use_porechop_override=
+genome_size_override=
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -177,6 +178,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --use-porechop)
       use_porechop_override=$2
+      shift 2
+      ;;
+    --genome-size)
+      genome_size_override=$2
       shift 2
       ;;
     --help|-h)
@@ -224,6 +229,25 @@ medaka_model=${medaka_model_override:-${MEDAKA_MODEL:-}}
 ont_minlength=${ont_minlength_override:-${ONT_MINLENGTH:-}}
 ont_minqual=${ont_minqual_override:-${ONT_MINQUAL:-}}
 use_porechop=${use_porechop_override:-${USE_PORECHOP:-}}
+
+# Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
+# Precedence: --genome-size flag > GENOME_SIZE (site config / env) > per-input-type
+# default. ONT defaults to 0 so Bactopia estimates each sample's genome size instead
+# of assuming a fixed 5 Mb; other input types stay empty so run_bactopia_batch.pbs
+# applies its own fallback. A value of 0 is valid (auto-estimate) and passes through.
+if [[ -n $genome_size_override ]]; then
+  genome_size=$genome_size_override
+elif [[ -n ${GENOME_SIZE:-} ]]; then
+  genome_size=$GENOME_SIZE
+elif [[ $input_type == "ont" ]]; then
+  genome_size=0
+else
+  genome_size=
+fi
+if [[ -n $genome_size && ! $genome_size =~ ^[0-9]+$ ]]; then
+  echo "--genome-size / GENOME_SIZE must be a non-negative integer (bp), or 0 to auto-estimate: $genome_size" >&2
+  exit 1
+fi
 
 run_agar_dir=${RUN_AGAR_DIR:-$(cd "$script_dir/.." && pwd)}
 
@@ -1238,6 +1262,7 @@ export RESULTS_ROOT=${RESULTS_ROOT:-$results_root_arg}
 export BATCH_DIR="$batch_dir"
 export BATCH_PREFIX="$batch_prefix"
 export BACTOPIA_INPUT_MODE="$input_type"
+export GENOME_SIZE="$genome_size"
 export MEDAKA_ROUNDS="$medaka_rounds"
 export MEDAKA_MODEL="$medaka_model"
 export ONT_MINLENGTH="$ont_minlength"

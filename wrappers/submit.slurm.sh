@@ -20,6 +20,9 @@ Options:
   --ont-minlength N             Minimum ONT read length passed to Bactopia
   --ont-minqual N               Minimum average ONT read quality passed to Bactopia
   --use-porechop yes|no         Enable or disable Bactopia Porechop for ONT reads
+  --genome-size N               Expected genome size (bp); drives Bactopia's coverage
+                                QC gate (min basepairs = N x 10). 0 = auto-estimate per
+                                sample. Default: 0 for ONT, else Bactopia default.
   --dry-run                    Validate config, inputs, and dependencies without submitting jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF
@@ -39,6 +42,7 @@ medaka_model_override=
 ont_minlength_override=
 ont_minqual_override=
 use_porechop_override=
+genome_size_override=
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -72,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --use-porechop)
       use_porechop_override=$2
+      shift 2
+      ;;
+    --genome-size)
+      genome_size_override=$2
       shift 2
       ;;
     --is-agar-project)
@@ -162,13 +170,14 @@ case "$resolved_input_type" in
     ;;
 esac
 
-for numeric_option in "${medaka_rounds_override:-}" "${ont_minlength_override:-}" "${ont_minqual_override:-}"; do
+for numeric_option in "${medaka_rounds_override:-}" "${ont_minlength_override:-}" "${ont_minqual_override:-}" "${genome_size_override:-}"; do
   if [[ -n $numeric_option && ! $numeric_option =~ ^[0-9]+$ ]]; then
-    echo "ONT numeric options must be non-negative integers: $numeric_option" >&2
+    echo "Numeric options must be non-negative integers: $numeric_option" >&2
     exit 1
   fi
 done
 
+[[ -n $genome_size_override ]] && export GENOME_SIZE=$genome_size_override
 [[ -n $medaka_rounds_override ]] && export MEDAKA_ROUNDS=$medaka_rounds_override
 [[ -n $medaka_model_override ]] && export MEDAKA_MODEL=$medaka_model_override
 [[ -n $ont_minlength_override ]] && export ONT_MINLENGTH=$ont_minlength_override
