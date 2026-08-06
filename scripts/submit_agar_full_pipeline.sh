@@ -273,6 +273,14 @@ else
   log_file=$results_root_arg/submit_agar_full_pipeline_$(date '+%Y%m%d_%H%M%S').log
 fi
 
+# Local (scheduler-free) backend: if the caller did not set PBS_LOG_DIR, capture
+# each stage's stdout/stderr next to the pipeline log instead of discarding it to
+# /dev/null (see the local branch in lib_scheduler.sh:scheduler_submit). Without
+# this, a failing stage prints only "see log: /dev/null" and the real error is lost.
+if [[ $scheduler_backend == "local" && -z ${PBS_LOG_DIR:-} ]]; then
+  PBS_LOG_DIR="$(dirname "$log_file")/stage-logs"
+fi
+
 submit_script=${SUBMIT_PIPELINE_SCRIPT:-$script_dir/submit_bactopia_batch_pipeline.sh}
 split_script=${SPLIT_SAMPLESHEET_SCRIPT:-$script_dir/split_bactopia_samplesheet.sh}
 normalize_script=${NORMALIZE_SCRIPT:-$script_dir/normalize_agar_fastq_sample_names.sh}
