@@ -379,24 +379,29 @@ Bactopia is the only path with a read-polishing step; see the
 ### Genome Size And QC Gates
 
 Bactopia uses the expected genome size for two things: its **coverage QC gate**
-(a sample needs at least `10 × genome_size` basepairs) and its **read
-subsampling** target (`rasusa` trims to `coverage × genome_size`). Set it with
-`--genome-size N` (or `GENOME_SIZE=N`); the default is `5000000` (5 Mb).
+(Bactopia's `--min_coverage`, default `10`, so a sample needs at least
+`10 × genome_size` basepairs) and its **read subsampling** target (`rasusa` trims
+to `coverage × genome_size`). Set it with `--genome-size N` (or `GENOME_SIZE=N`);
+the default is `5000000` (5 Mb).
 
 - Use a realistic size (e.g. `6300000` for *P. aeruginosa*). It must be a
   positive integer — `0`/`1` do **not** disable QC, they shrink every sample to a
-  few basepairs and then fail a separate hardcoded gate, so they are rejected.
+  few basepairs and then fail Bactopia's absolute floors, so they are rejected.
 - Low-coverage samples legitimately fail QC and produce no assembly. To force
   them through anyway (provisional assemblies on shallow data), relax the gates
   with `EXTRA_ARGS_STRING`:
 
   ```bash
-  EXTRA_ARGS_STRING="--coverage 0 --min_basepairs 0 --min_reads 0" \
+  EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0" \
   GENOME_SIZE=5000000 ./bin/agar-bactopia submit local \
     --input-type ont /path/to/ont_fastqs /path/to/metadata /path/to/results 50
   ```
 
-  `--coverage 0` is what actually skips `rasusa`, so the reads survive intact.
+  Each flag disables one gate: `--min_coverage 0` the `genome_size × 10` coverage
+  floor (the usual reason shallow samples are discontinued), `--coverage 0` the
+  `rasusa` subsampling (so reads survive intact), and `--min_basepairs 0` /
+  `--min_reads 0` the absolute read/basepair floors. Keep `GENOME_SIZE` realistic
+  so the `coverage_x` flag stays meaningful.
 
 Every sample's coverage (input basepairs ÷ genome size) is written to the results
 sheet as `coverage_x`, with `low_coverage` = `yes` when it is below `10×`

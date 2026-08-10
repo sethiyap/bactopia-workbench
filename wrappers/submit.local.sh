@@ -31,7 +31,8 @@ Options:
                                 (coverage x N), so use a realistic size -- 0/1 delete
                                 reads, they do not disable QC. Default: 5 Mb. To relax
                                 QC gates set EXTRA_ARGS_STRING (e.g. --coverage 0
-                                --min_basepairs 0 --min_reads 0).
+                                --min_coverage 0 --min_basepairs 0 --min_reads 0);
+                                --min_coverage 0 disables the 10x coverage gate.
   --dry-run                    Validate config, inputs, and dependencies without running jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF

@@ -131,17 +131,18 @@ if [[ $BACTOPIA_INPUT_MODE == "ont" ]]; then
 fi
 
 # genome_size is the EXPECTED genome size in bp and must be realistic. Bactopia uses
-# it for two things: the coverage QC gate (min basepairs = 10 x genome_size) AND the
-# rasusa subsample target (coverage x genome_size). A tiny value like 1 does NOT
-# disable QC -- it makes rasusa subsample every sample down to a few bases, which then
-# fails Bactopia's separate, hardcoded --min_basepairs / --min_reads gates. So 0 and 1
-# destroy the reads; only a realistic size is valid. Unset falls back to 5 Mb. To
-# relax the QC gates, set EXTRA_ARGS_STRING (e.g. "--coverage 0 --min_basepairs 0
-# --min_reads 0") -- "--coverage 0" is what actually skips rasusa.
+# it for two things: the coverage QC gate (Bactopia's --min_coverage, default 10, so
+# it needs >= 10 x genome_size basepairs) AND the rasusa subsample target (coverage x
+# genome_size). A tiny value like 1 does NOT disable QC -- it makes rasusa subsample
+# every sample down to a few bases, which then fails Bactopia's absolute
+# --min_basepairs / --min_reads floors. So 0 and 1 destroy the reads; only a realistic
+# size is valid. Unset falls back to 5 Mb. To assemble shallow samples anyway, relax
+# the gates with EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0
+# --min_reads 0" -- --min_coverage 0 is what disables the "10x coverage" gate.
 if [[ -z $GENOME_SIZE ]]; then
   GENOME_SIZE=5000000
 elif [[ $GENOME_SIZE == "0" ]]; then
-  echo "GENOME_SIZE=0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so 0 shrinks every sample to ~0 bp and then fails QC -- it does NOT disable the gate. Pass a realistic size (e.g. --genome-size 5000000), or relax QC with EXTRA_ARGS_STRING='--coverage 0 --min_basepairs 0 --min_reads 0'." >&2
+  echo "GENOME_SIZE=0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so 0 shrinks every sample to ~0 bp and then fails QC -- it does NOT disable the gate. Pass a realistic size (e.g. --genome-size 5000000), or relax QC with EXTRA_ARGS_STRING='--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0'." >&2
   exit 1
 fi
 GENOME_SIZE_ARGS=(--genome_size "$GENOME_SIZE")

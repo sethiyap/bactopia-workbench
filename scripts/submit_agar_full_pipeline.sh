@@ -235,8 +235,9 @@ use_porechop=${use_porechop_override:-${USE_PORECHOP:-}}
 # run_bactopia_batch.pbs falls back to 5 Mb. It drives BOTH the coverage QC gate
 # (min basepairs = 10 x genome_size) AND rasusa read subsampling (coverage x
 # genome_size), so it must be a realistic positive size -- 0/1 shrink reads to ~0
-# and fail QC rather than disabling it. To relax the QC gates, set EXTRA_ARGS_STRING
-# (e.g. "--coverage 0 --min_basepairs 0 --min_reads 0").
+# and fail QC rather than disabling it. To assemble shallow samples anyway, relax the
+# gates with EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0
+# --min_reads 0" (--min_coverage 0 disables the genome_size x 10 coverage gate).
 if [[ -n $genome_size_override ]]; then
   genome_size=$genome_size_override
 elif [[ -n ${GENOME_SIZE:-} ]]; then
@@ -245,7 +246,7 @@ else
   genome_size=
 fi
 if [[ -n $genome_size && ! $genome_size =~ ^[1-9][0-9]*$ ]]; then
-  echo "--genome-size / GENOME_SIZE must be a positive integer (bp), e.g. 5000000. 0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so tiny values delete your data instead of disabling QC. To relax the QC gates, set EXTRA_ARGS_STRING='--coverage 0 --min_basepairs 0 --min_reads 0'." >&2
+  echo "--genome-size / GENOME_SIZE must be a positive integer (bp), e.g. 5000000. 0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so tiny values delete your data instead of disabling QC. To relax the QC gates, set EXTRA_ARGS_STRING='--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0'." >&2
   exit 1
 fi
 
