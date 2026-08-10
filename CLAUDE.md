@@ -39,11 +39,16 @@ Python exporter:
   contiguous instead of scattering to the end.
 - Review/QC columns always sit at the **very end** of the sheet, after every
   tool block, via `review_tail_cols`: `review_required`, `review_reason`,
-  `mlst_canonical_genus`, `phenotype_canonical_genus`, and `mlst_review_note`.
+  `coverage_x`, `low_coverage`, `mlst_canonical_genus`,
+  `phenotype_canonical_genus`, and `mlst_review_note`.
   These are excluded from tool grouping (so, e.g., `mlst_canonical_genus` does
-  not fold into the MLST block despite its prefix). `mlst_review_note` is
-  appended downstream by `run_review_mlst_from_tsv.sh` as the last column of the
-  `*_mlst_reviewed.tsv` file.
+  not fold into the MLST block despite its prefix). `coverage_x` / `low_coverage`
+  are the input-read coverage flag (input basepairs ÷ genome size, `< 10×`
+  flagged), computed per batch in `run_bactopia_batch.*`, consolidated into
+  `coverage_summary.tsv`, and joined onto the sheet in
+  `map_agrf_samplesheet_results.R`. They appear only when that table exists.
+  `mlst_review_note` is appended downstream by `run_review_mlst_from_tsv.sh` as
+  the last column of the `*_mlst_reviewed.tsv` file.
 
 When adding a new tool or new per-tool columns:
 

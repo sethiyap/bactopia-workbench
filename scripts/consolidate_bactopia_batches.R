@@ -935,6 +935,25 @@ message("Discovered ", length(batch_dirs), " batch result directories")
 project_summary <- build_project_summary(batch_dirs)
 write_tsv_flex(project_summary, file.path(output_dir, "project_summary.tsv"))
 
+# Consolidate the per-batch input-read coverage summaries (written by
+# run_bactopia_batch) into one table so the mapper can surface a low-coverage flag.
+coverage_tables <- lapply(batch_dirs, function(batch_dir) {
+  coverage_file <- file.path(batch_dir, "coverage_summary.tsv")
+  if (!file.exists(coverage_file)) {
+    return(NULL)
+  }
+  tryCatch(
+    utils::read.delim(coverage_file, check.names = FALSE, stringsAsFactors = FALSE),
+    error = function(e) NULL
+  )
+})
+coverage_tables <- coverage_tables[!vapply(coverage_tables, is.null, logical(1))]
+if (length(coverage_tables)) {
+  coverage_all <- do.call(rbind, coverage_tables)
+  write_tsv_flex(coverage_all, file.path(output_dir, "coverage_summary.tsv"))
+  message("Wrote consolidated coverage summary for ", nrow(coverage_all), " sample(s)")
+}
+
 main_files_by_base <- list()
 main_batch_names_by_base <- list()
 tool_files_by_key <- list()

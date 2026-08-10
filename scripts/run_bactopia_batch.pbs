@@ -166,3 +166,37 @@ printf '\n'
 
 rsync -av results_main/ "$RESULTS_OUT/results_main/"
 rsync -av .nextflow.log* "$RESULTS_OUT/" || true
+
+# --- Per-sample input-read coverage flag -------------------------------------
+# Write each sample's coverage (input basepairs / expected genome size) so the
+# consolidator/mapper can surface a low-coverage flag in the results sheet. When QC
+# gates are relaxed (EXTRA_ARGS_STRING="--coverage 0 ...") shallow samples still
+# assemble, and this is how they stay identifiable. Computed from the FOFN
+# (sample<TAB>runtype<TAB>r1<TAB>r2<TAB>extra), not Bactopia's internal layout, so it
+# is robust; it uses input reads, which run slightly higher than post-QC, so it is a
+# flag rather than a QC gate. Best-effort: never fail the job over this.
+LOW_COVERAGE_THRESHOLD=${LOW_COVERAGE_THRESHOLD:-10}
+coverage_summary="${RESULTS_OUT}/coverage_summary.tsv"
+if [[ -f "$SAMPLESHEET" && "$GENOME_SIZE" =~ ^[1-9][0-9]*$ ]]; then
+  {
+    printf 'sample\tinput_total_bp\tgenome_size\tcoverage_x\tlow_coverage\n'
+    tail -n +2 "$SAMPLESHEET" | while IFS=$'\t' read -r csample cruntype cr1 cr2 cextra; do
+      [[ -z "$csample" ]] && continue
+      ctotal=0
+      for cfq in "$cr1" "$cr2"; do
+        [[ -n "$cfq" && -f "$cfq" ]] || continue
+        cbp=$(zcat -f -- "$cfq" 2>/dev/null | awk 'NR%4==2{b+=length($0)} END{printf "%d", b+0}')
+        ctotal=$((ctotal + cbp))
+      done
+      if [[ "$ctotal" -gt 0 ]]; then
+        ccov=$(awk -v b="$ctotal" -v g="$GENOME_SIZE" 'BEGIN{printf "%.2f", b/g}')
+        clow=$(awk -v c="$ccov" -v t="$LOW_COVERAGE_THRESHOLD" 'BEGIN{print (c+0 < t+0 ? "yes" : "no")}')
+      else
+        ccov=NA
+        clow=NA
+      fi
+      printf '%s\t%s\t%s\t%s\t%s\n' "$csample" "$ctotal" "$GENOME_SIZE" "$ccov" "$clow"
+    done
+  } > "$coverage_summary" 2>/dev/null || true
+  printf 'Wrote input-read coverage summary: %s\n' "$coverage_summary" >&2
+fi

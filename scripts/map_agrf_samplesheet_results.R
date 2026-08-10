@@ -941,6 +941,27 @@ left_join_base <- function(x, y, by = "sample") {
   x
 }
 
+find_coverage_summary <- function(root) {
+  candidates <- c(
+    file.path(root, "coverage_summary.tsv"),
+    file.path(root, "results_main", "merged-results", "coverage_summary.tsv")
+  )
+  candidates <- candidates[file.exists(candidates)]
+  if (!length(candidates)) {
+    return(NULL)
+  }
+  dat <- read_table_flex(candidates[[1L]])
+  names(dat) <- tolower(gsub("[^A-Za-z0-9]+", "_", names(dat)))
+  if (!"sample" %in% names(dat)) {
+    return(NULL)
+  }
+  keep <- intersect(c("sample", "coverage_x", "low_coverage"), names(dat))
+  if (length(keep) < 2L) {
+    return(NULL)
+  }
+  dat[keep]
+}
+
 merged <- result_samples
 merged <- left_join_base(merged, agrf, by = "sample")
 if (!"Sample name" %in% names(merged)) {
@@ -954,6 +975,7 @@ merged <- left_join_base(merged, fimtyper, by = "sample")
 merged <- left_join_base(merged, abritamr, by = "sample")
 merged <- left_join_base(merged, plasmidfinder, by = "sample")
 merged <- left_join_base(merged, bracken, by = "sample")
+merged <- left_join_base(merged, find_coverage_summary(consolidated_dir), by = "sample")
 merged <- flag_review_columns(merged)
 
 preferred_order <- c(
@@ -993,13 +1015,17 @@ preferred_order <- c(
 )
 
 # Review/QC columns always sit at the very end of the sheet, after every tool
-# block. `mlst_review_note` is appended downstream by run_review_mlst_from_tsv.sh
-# (already last there); it is listed for robustness in case it ever reaches this
-# stage. These are excluded from tool grouping so, e.g., `mlst_canonical_genus`
-# does not fold into the MLST block mid-sheet.
+# block. `coverage_x` / `low_coverage` are the input-read coverage flag joined from
+# the consolidated coverage_summary.tsv (present only when that table exists).
+# `mlst_review_note` is appended downstream by run_review_mlst_from_tsv.sh (already
+# last there); it is listed for robustness in case it ever reaches this stage. These
+# are excluded from tool grouping so, e.g., `mlst_canonical_genus` does not fold into
+# the MLST block mid-sheet.
 review_tail_cols <- c(
   "review_required",
   "review_reason",
+  "coverage_x",
+  "low_coverage",
   "mlst_canonical_genus",
   "phenotype_canonical_genus",
   "mlst_review_note"
