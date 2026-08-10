@@ -224,6 +224,9 @@ Main public options:
 - `--ont-minlength N`: set Bactopia's minimum ONT read length
 - `--ont-minqual N`: set Bactopia's minimum average ONT read quality
 - `--use-porechop yes|no`: control ONT adapter removal in Bactopia
+- `--genome-size N`: expected genome size in bp (default `5000000`). Drives
+  Bactopia's coverage QC gate **and** read subsampling — see
+  [Genome Size And QC Gates](#genome-size-and-qc-gates)
 - `--additional-tools yes|no`: turn the extra tool bundle on or off
 - `--dry-run`: validate config, inputs, and dependencies without submitting jobs
 - `--is-agar-project auto|1|0`: control AGAR-specific normalization and filtering
@@ -372,6 +375,33 @@ model:
 
 Bactopia is the only path with a read-polishing step; see the
 [Pipeline Overview](#pipeline-overview) flowchart for where Medaka/Racon fit.
+
+### Genome Size And QC Gates
+
+Bactopia uses the expected genome size for two things: its **coverage QC gate**
+(a sample needs at least `10 × genome_size` basepairs) and its **read
+subsampling** target (`rasusa` trims to `coverage × genome_size`). Set it with
+`--genome-size N` (or `GENOME_SIZE=N`); the default is `5000000` (5 Mb).
+
+- Use a realistic size (e.g. `6300000` for *P. aeruginosa*). It must be a
+  positive integer — `0`/`1` do **not** disable QC, they shrink every sample to a
+  few basepairs and then fail a separate hardcoded gate, so they are rejected.
+- Low-coverage samples legitimately fail QC and produce no assembly. To force
+  them through anyway (provisional assemblies on shallow data), relax the gates
+  with `EXTRA_ARGS_STRING`:
+
+  ```bash
+  EXTRA_ARGS_STRING="--coverage 0 --min_basepairs 0 --min_reads 0" \
+  GENOME_SIZE=5000000 ./bin/agar-bactopia submit local \
+    --input-type ont /path/to/ont_fastqs /path/to/metadata /path/to/results 50
+  ```
+
+  `--coverage 0` is what actually skips `rasusa`, so the reads survive intact.
+
+Every sample's coverage (input basepairs ÷ genome size) is written to the results
+sheet as `coverage_x`, with `low_coverage` = `yes` when it is below `10×`
+(override the cutoff with `LOW_COVERAGE_THRESHOLD=N`). These are informational —
+they flag shallow samples without excluding them. See [Outputs](#outputs).
 
 ### Submit Local Assemblies
 
@@ -659,6 +689,7 @@ RESULTS_ROOT/
 ├── batch_bactopia_consolidated/
 │   ├── project_summary.tsv
 │   ├── tool_processing_log.tsv
+│   ├── coverage_summary.tsv                  # per-sample input-read coverage
 │   ├── results_main/
 │   └── tools/
 ├── B07_samplesheet_with_results.tsv
@@ -707,6 +738,8 @@ Common metadata and review columns:
 
 - always expected from metadata: `Sample name`, `Comments`
 - common mapped result fields: MLST, Kleborate, FimTyper, abritAMR, PlasmidFinder, Bracken
+- coverage flag (at the end, when available): `coverage_x`, `low_coverage`
+  (see [Genome Size And QC Gates](#genome-size-and-qc-gates))
 - common review fields: `review_required`, `review_reason`, `mlst_review_note`
 
 If `<prefix>_samplesheet_with_results_mlst_reviewed.tsv` exists, use that as the
