@@ -376,6 +376,25 @@ model:
 Bactopia is the only path with a read-polishing step; see the
 [Pipeline Overview](#pipeline-overview) flowchart for where Medaka/Racon fit.
 
+Multiplexed ONT runs frequently have some samples below Bactopia's coverage gate
+(`10 × genome_size`); those are discontinued before assembly with a message like
+`... does not exceed the required minimum 50000000 bp (10x coverage)`. To assemble
+the shallow ones anyway (as provisional) and keep them flagged in the results,
+relax the gates:
+
+```bash
+EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0" \
+GENOME_SIZE=5000000 ./bin/agar-bactopia submit local \
+  --input-type ont \
+  /path/to/ont_fastqs \
+  /path/to/metadata \
+  /path/to/results_ont \
+  25
+```
+
+See [Genome Size And QC Gates](#genome-size-and-qc-gates) for what each flag does
+and the `coverage_x` / `low_coverage` columns this adds to the results sheet.
+
 ### Genome Size And QC Gates
 
 Bactopia uses the expected genome size for two things: its **coverage QC gate**
