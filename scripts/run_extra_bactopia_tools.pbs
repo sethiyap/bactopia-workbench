@@ -65,11 +65,17 @@ if [[ "${USE_MODULES:-1}" == "1" ]]; then
   module load singularity
 fi
 
-export NXF_HOME="$SCRATCH_RUN/.nextflow"
+# Persist Nextflow's jar/capsule cache per-user (default $HOME/.nextflow) so the
+# stage does not re-download Nextflow every run. Pin temp files to a stage-local
+# dir so a bad TMPDIR/NXF_TEMP inherited from the caller's shell cannot break the
+# run (NXF_TEMP wins over TMPDIR in Nextflow, so set both).
+export NXF_HOME="${NXF_HOME:-$HOME/.nextflow}"
 export NXF_WORK="$SCRATCH_RUN/work"
 export NXF_SINGULARITY_CACHEDIR="$SING_CACHE"
 export SINGULARITY_CACHEDIR="$SING_CACHE"
-mkdir -p "$NXF_HOME" "$NXF_WORK" "$NXF_SINGULARITY_CACHEDIR"
+export TMPDIR="$SCRATCH_RUN/tmp"
+export NXF_TEMP="$TMPDIR"
+mkdir -p "$NXF_HOME" "$NXF_WORK" "$NXF_SINGULARITY_CACHEDIR" "$TMPDIR"
 
 if [[ -z "$RESULTS_MAIN" ]]; then
   echo "RESULTS_MAIN is required." >&2
