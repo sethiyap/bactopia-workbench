@@ -230,11 +230,13 @@ ont_minlength=${ont_minlength_override:-${ONT_MINLENGTH:-}}
 ont_minqual=${ont_minqual_override:-${ONT_MINQUAL:-}}
 use_porechop=${use_porechop_override:-${USE_PORECHOP:-}}
 
-# Genome size drives Bactopia's coverage QC gate (min basepairs = genome_size x 10).
-# Precedence: --genome-size flag > GENOME_SIZE (site config / env) > unset. When unset
-# it is left empty and run_bactopia_batch.pbs falls back to 5 Mb. Bactopia 3.2.0 has
-# no auto-estimate and falsy-checks the value, so empty and 0 are both resolved to a
-# real integer there before the job runs: 0 disables the coverage gate (passed as 1).
+# Genome size is the EXPECTED genome size (bp). Precedence: --genome-size flag >
+# GENOME_SIZE (site config / env) > unset. When unset it is left empty and
+# run_bactopia_batch.pbs falls back to 5 Mb. It drives BOTH the coverage QC gate
+# (min basepairs = 10 x genome_size) AND rasusa read subsampling (coverage x
+# genome_size), so it must be a realistic positive size -- 0/1 shrink reads to ~0
+# and fail QC rather than disabling it. To relax the QC gates, set EXTRA_ARGS_STRING
+# (e.g. "--coverage 0 --min_basepairs 0 --min_reads 0").
 if [[ -n $genome_size_override ]]; then
   genome_size=$genome_size_override
 elif [[ -n ${GENOME_SIZE:-} ]]; then
@@ -242,8 +244,8 @@ elif [[ -n ${GENOME_SIZE:-} ]]; then
 else
   genome_size=
 fi
-if [[ -n $genome_size && ! $genome_size =~ ^[0-9]+$ ]]; then
-  echo "--genome-size / GENOME_SIZE must be a non-negative integer (bp), or 0 to auto-estimate: $genome_size" >&2
+if [[ -n $genome_size && ! $genome_size =~ ^[1-9][0-9]*$ ]]; then
+  echo "--genome-size / GENOME_SIZE must be a positive integer (bp), e.g. 5000000. 0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so tiny values delete your data instead of disabling QC. To relax the QC gates, set EXTRA_ARGS_STRING='--coverage 0 --min_basepairs 0 --min_reads 0'." >&2
   exit 1
 fi
 
@@ -1261,6 +1263,7 @@ export BATCH_DIR="$batch_dir"
 export BATCH_PREFIX="$batch_prefix"
 export BACTOPIA_INPUT_MODE="$input_type"
 export GENOME_SIZE="$genome_size"
+export EXTRA_ARGS_STRING="${EXTRA_ARGS_STRING:-}"
 export MEDAKA_ROUNDS="$medaka_rounds"
 export MEDAKA_MODEL="$medaka_model"
 export ONT_MINLENGTH="$ont_minlength"

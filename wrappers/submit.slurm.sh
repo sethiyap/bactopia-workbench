@@ -20,10 +20,12 @@ Options:
   --ont-minlength N             Minimum ONT read length passed to Bactopia
   --ont-minqual N               Minimum average ONT read quality passed to Bactopia
   --use-porechop yes|no         Enable or disable Bactopia Porechop for ONT reads
-  --genome-size N               Expected genome size (bp); drives Bactopia's coverage
-                                QC gate (min basepairs = N x 10). Default: 5 Mb (all
-                                input types). 0 disables the gate (Bactopia has no
-                                auto-estimate) so shallow data still assembles.
+  --genome-size N               Expected genome size (bp). Drives BOTH the coverage QC
+                                gate (min basepairs = N x 10) AND rasusa subsampling
+                                (coverage x N), so use a realistic size -- 0/1 delete
+                                reads, they do not disable QC. Default: 5 Mb. To relax
+                                QC gates set EXTRA_ARGS_STRING (e.g. --coverage 0
+                                --min_basepairs 0 --min_reads 0).
   --dry-run                    Validate config, inputs, and dependencies without submitting jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF
