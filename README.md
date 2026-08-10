@@ -403,6 +403,11 @@ Bactopia uses the expected genome size for two things: its **coverage QC gate**
 to `coverage × genome_size`). Set it with `--genome-size N` (or `GENOME_SIZE=N`);
 the default is `5000000` (5 Mb).
 
+Both `--genome-size` and the gate-relaxing `EXTRA_ARGS_STRING` below are optional
+overrides — they do not change the base command. Deeply-covered isolates (typical
+Illumina) clear the 10× gate easily and need neither; this mainly matters for
+marginal-coverage data, usually multiplexed ONT.
+
 - Use a realistic size (e.g. `6300000` for *P. aeruginosa*). It must be a
   positive integer — `0`/`1` do **not** disable QC, they shrink every sample to a
   few basepairs and then fail Bactopia's absolute floors, so they are rejected.
