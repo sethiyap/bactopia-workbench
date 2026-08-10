@@ -423,6 +423,13 @@ find_sample_level_tool_tables <- function(tool_run_dir, tool_name) {
     candidates[[which.max(scores)]]
   }), use.names = FALSE)
 
+  # unlist() over an empty/all-empty list yields NULL, and order(NULL) errors with
+  # "argument 1 is not a vector". Return an empty character vector instead so the
+  # caller falls back to the merged-dir path (and, ultimately, reports the tool as
+  # having no results) rather than aborting the whole consolidation.
+  if (!length(files)) {
+    return(character())
+  }
   files[order(files)]
 }
 
@@ -954,6 +961,21 @@ for (batch_dir in batch_dirs) {
     tool_files_by_key <- collected$tool_files_by_key
     tool_batch_names_by_key <- collected$tool_batch_names_by_key
   }
+}
+
+# If no batch produced any main or per-sample tool tables, the upstream stage
+# emitted nothing to consolidate (typically every sample failed Bactopia's QC, so
+# no assemblies were made and each results_<tool>/ holds only bactopia-runs/). Fail
+# with a clear explanation instead of writing empty outputs and reporting success.
+if (!length(main_files_by_base) && !length(tool_files_by_key)) {
+  stop(
+    "No per-sample results were found in any batch under '", results_root, "'. ",
+    "Every results_<tool>/ contained only bactopia-runs/ (no sample outputs), which ",
+    "usually means the assembly/QC stage produced nothing -- e.g. all samples failed ",
+    "Bactopia's coverage / min-basepairs QC. Check the Bactopia stage logs and the ",
+    "genome-size / QC settings before re-running consolidation.",
+    call. = FALSE
+  )
 }
 
 tool_processing_log <- build_tool_processing_log(tool_files_by_key, tool_batch_names_by_key)
