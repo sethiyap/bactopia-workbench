@@ -142,6 +142,30 @@ It does **not** install Bactopia, the datasets, Nextflow, the container engine, 
 `openpyxl` — provide those separately. Full bundled-vs-external list:
 [docs/runtime-dependencies.md](docs/runtime-dependencies.md).
 
+#### Tool container images
+
+Bactopia runs each tool inside a container, so the **tool images must be
+downloaded** before (or during) the first run. Nextflow pulls them
+**automatically** into `SING_CACHE` on first use and reuses them afterwards — so
+the first run needs internet access. The images come from public registries
+(BioContainers, mirrored as ready-to-use Singularity images at the Galaxy Depot):
+
+- <https://depot.galaxyproject.org/singularity/> — Bactopia's per-tool images
+- pinned examples: `quay.io/biocontainers/mlst:2.33.1--hdfd78af_0`,
+  `quay.io/biocontainers/kleborate:2.3.2--pyhdfd78af_0`
+
+To pre-stage them (offline hosts, or to avoid the first-run pull), use the helper —
+it downloads `mlst`/`kleborate` into `SING_CACHE` and prints the `*_CONTAINER`
+lines to add to your site config:
+
+```bash
+./scripts/pull_local_containers.sh            # add --with-fimtyper to also fetch FimTyper
+```
+
+**FimTyper** has no public image (the GHCR one is private), so either build a
+`.sif` and set `FIMTYPER_CONTAINER`, or run it natively via `FIMTYPER_DIR` /
+`FIMTYPER_ENV` — see [FimTyper](#fimtyper).
+
 ### 3. Create your site config
 
 Copy the example for your backend and edit the paths (skip on the pre-configured
