@@ -1415,7 +1415,7 @@ if [[ $run_st131typer == 1 && $st131_append_after_workbook != 1 ]]; then
   st131typer_job_id=$(scheduler_submit \
     "st131typer_job" \
     "$st131_dependency_job" \
-    "ASSEMBLIES_DIR=${st131_input_dir},RESULTS_ROOT=${RESULTS_ROOT},ST131_TYPER_SCRIPT=${st131typer_script},ST131_TYPER_OUTPUT_DIR=${st131typer_output_dir}" \
+    "ASSEMBLIES_DIR=${st131_input_dir},RESULTS_ROOT=${RESULTS_ROOT},ST131_TYPER_SCRIPT=${st131typer_script},ST131_TYPER_OUTPUT_DIR=${st131typer_output_dir},MLST_ENV=${MLST_ENV:-}" \
     "$st131typer_pbs_script" \
     "${PBS_LOG_DIR:-}" \
     "${PBS_MAIL_OPTIONS:-}" \
@@ -1472,7 +1472,7 @@ if [[ $st131_append_after_workbook == 1 ]]; then
   st131typer_job_id=$(scheduler_submit \
     "st131typer_job" \
     "$st131_dependency_job" \
-    "ASSEMBLIES_DIR=${st131_input_dir},RESULTS_ROOT=${RESULTS_ROOT},ST131_TYPER_SCRIPT=${st131typer_script},ST131_TYPER_OUTPUT_DIR=${st131typer_output_dir}" \
+    "ASSEMBLIES_DIR=${st131_input_dir},RESULTS_ROOT=${RESULTS_ROOT},ST131_TYPER_SCRIPT=${st131typer_script},ST131_TYPER_OUTPUT_DIR=${st131typer_output_dir},MLST_ENV=${MLST_ENV:-}" \
     "$st131typer_pbs_script" \
     "${PBS_LOG_DIR:-}" \
     "${PBS_MAIL_OPTIONS:-}" \

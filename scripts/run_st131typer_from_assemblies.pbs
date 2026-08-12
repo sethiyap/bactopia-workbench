@@ -15,6 +15,20 @@ ASSEMBLIES_DIR=${ASSEMBLIES_DIR:-}
 RESULTS_ROOT=${RESULTS_ROOT:-${PBS_O_WORKDIR:-$PWD}}
 ST131_TYPER_SCRIPT=${ST131_TYPER_SCRIPT:-}
 ST131_TYPER_OUTPUT_DIR=${ST131_TYPER_OUTPUT_DIR:-${RESULTS_ROOT}/st131typer}
+MLST_ENV=${MLST_ENV:-}
+
+# ST131Typer.sh shells out to seqkit, which ships in MLST_ENV rather than on the
+# default PATH. On PBS/Slurm only declared job variables are forwarded (no ambient
+# shell), so put MLST_ENV/bin on PATH here and fail fast: ST131Typer's own seqkit
+# check prints an error but exits 0, which would otherwise surface much later as a
+# confusing "no summary.txt" failure.
+if [[ -n "$MLST_ENV" && -d "$MLST_ENV/bin" ]]; then
+  export PATH="${MLST_ENV}/bin:$PATH"
+fi
+if ! command -v seqkit >/dev/null 2>&1; then
+  echo "seqkit not found on PATH. Set MLST_ENV to the conda env that provides seqkit (and mlst)." >&2
+  exit 1
+fi
 
 if [[ -z "$ASSEMBLIES_DIR" || ! -d "$ASSEMBLIES_DIR" ]]; then
   echo "ASSEMBLIES_DIR not found: $ASSEMBLIES_DIR" >&2
