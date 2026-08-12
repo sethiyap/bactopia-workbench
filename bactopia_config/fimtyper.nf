@@ -14,6 +14,16 @@ assemblies_ch = Channel
         tuple(sample, assembly)
     }
 
+// FimTyper resolves from one of two layouts:
+//   - native: FIMTYPER_DIR points at a fimtyper checkout (fimtyper.pl +
+//     fimtyper_db/), with FIMTYPER_ENV supplying BLAST on PATH. fimtyper.local.config
+//     turns the container engine off in this mode.
+//   - container: FIMTYPER_DIR unset, so the published image's bundled
+//     /usr/local/fimtyper layout is used and the image is pulled as before.
+// The container layout stays the fallback so existing container runs are unchanged.
+fimtyperRoot = System.getenv('FIMTYPER_DIR') ?: '/usr/local/fimtyper'
+fimtyperEnv  = System.getenv('FIMTYPER_ENV')
+
 process FIMTYPER {
     tag "${sample}"
     publishDir params.outdir, mode: 'copy'
@@ -29,19 +39,21 @@ process FIMTYPER {
     path("${sample}")
 
     script:
+    def envPath = fimtyperEnv ? "export PATH=\"${fimtyperEnv}/bin:\$PATH\"" : ''
     """
+    ${envPath}
     mkdir -p ${sample}
 
     gunzip -c ${assembly} > ${sample}.fna
 
-    perl /usr/local/fimtyper/fimtyper.pl \
-      -d /usr/local/fimtyper/fimtyper_db \
-      -i ${sample}.fna \
-      -k 95.00 \
-      -l 0.60 \
+    perl ${fimtyperRoot}/fimtyper.pl \\
+      -d ${fimtyperRoot}/fimtyper_db \\
+      -i ${sample}.fna \\
+      -k 95.00 \\
+      -l 0.60 \\
       -o ${sample}/${sample}
 
-   rm -f ${sample}.fna
+    rm -f ${sample}.fna
     """
 }
 
@@ -78,4 +90,3 @@ workflow {
     fimtyper_out = FIMTYPER(assemblies_ch)
     FIMTYPER_MERGE(fimtyper_out.collect())
 }
-
