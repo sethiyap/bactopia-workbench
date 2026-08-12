@@ -328,7 +328,16 @@ st131typer_input_dir=${ST131_TYPER_INPUT_DIR:-}
 assemblies_outdir=${ASSEMBLIES_OUTDIR:-$results_root_arg/$(basename "$results_root_arg")_assemblies}
 st131typer_output_dir=${ST131_TYPER_OUTPUT_DIR:-$results_root_arg/$(basename "$results_root_arg")_st131typer}
 export_results_workbook_pbs_script=${EXPORT_RESULTS_WORKBOOK_PBS_SCRIPT:-$script_dir/run_export_bactopia_results_workbook.pbs}
-export_results_workbook_python_bin=${EXPORT_RESULTS_WORKBOOK_PYTHON_BIN:-python3}
+# Resolve the workbook exporter's Python. openpyxl usually lives in MLST_ENV, not in
+# the system interpreter, so prefer MLST_ENV/bin/python3 over a bare python3 that
+# would fail at the very last stage. An explicit override still wins.
+if [[ -n ${EXPORT_RESULTS_WORKBOOK_PYTHON_BIN:-} ]]; then
+  export_results_workbook_python_bin=$EXPORT_RESULTS_WORKBOOK_PYTHON_BIN
+elif [[ -n ${MLST_ENV:-} && -x ${MLST_ENV}/bin/python3 ]]; then
+  export_results_workbook_python_bin=${MLST_ENV}/bin/python3
+else
+  export_results_workbook_python_bin=python3
+fi
 export_results_workbook_script=${EXPORT_RESULTS_WORKBOOK_SCRIPT:-$script_dir/export_bactopia_results_workbook.py}
 metadata_validation_python_bin=${METADATA_VALIDATION_PYTHON_BIN:-python3}
 is_agar_project=${IS_AGAR_PROJECT:-auto}
