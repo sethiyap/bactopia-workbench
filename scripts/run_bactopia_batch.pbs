@@ -95,8 +95,11 @@ export SINGULARITY_CACHEDIR="$SING_CACHE"
 # Force temp files into a stage-local dir so a bad TMPDIR / NXF_TEMP inherited from
 # the caller's shell (e.g. a stale tmux session that points them at an unwritable or
 # nonexistent path) cannot break the run. NXF_TEMP wins over TMPDIR inside Nextflow,
-# so pin both to the same known-good, writable location.
-export TMPDIR="$SCRATCH_RUN/tmp"
+# so pin both to the same known-good, writable location. It MUST live under NXF_WORK:
+# Nextflow runs containers with --no-home and binds only $NXF_WORK, so a sibling temp
+# dir would exist on the host but be invisible inside the container, and any
+# containerised tool using TMPDIR (e.g. Prokka's GNU parallel) would then fail.
+export TMPDIR="$NXF_WORK/tmp"
 export NXF_TEMP="$TMPDIR"
 mkdir -p "$NXF_HOME" "$NXF_WORK" "$NXF_SINGULARITY_CACHEDIR" "$TMPDIR"
 
