@@ -36,6 +36,17 @@ text = text.replace(
     "checkm: $( (checkm -h 2>&1 || true)",
 )
 
+# CheckM's multiprocessing.Manager opens an AF_UNIX socket under TMPDIR. Our TMPDIR
+# ($NXF_WORK/tmp) is a deep path that, plus Python's pymp-*/listener-* suffix,
+# overruns the 108-char sun_path limit ("OSError: AF_UNIX path too long"). Point
+# CheckM at the short container /tmp so the socket path string stays well under it.
+# (Concurrent CheckM tasks stay unique via Python's random pymp-* subdir name.)
+text = text.replace(
+    "checkm \\\n    lineage_wf",
+    "export TMPDIR=/tmp\ncheckm \\\n    lineage_wf",
+    1,
+)
+
 text += "\n# checkm_command_fix applied\n"
 path.write_text(text)
 PY
