@@ -251,6 +251,10 @@ Main public options:
 - `--genome-size N`: expected genome size in bp (default `5000000`). Drives
   Bactopia's coverage QC gate **and** read subsampling — see
   [Genome Size And QC Gates](#genome-size-and-qc-gates)
+- `--exclude-samples REGEX`: skip samples whose name matches `REGEX`
+  (case-insensitive) so they are never batched or assembled — e.g.
+  `'unclassified|lambda|neg'` to drop ONT controls. Excluded samples are logged;
+  the original manifest is preserved and a `*.filtered.fofn` is used for the run
 - `--additional-tools yes|no`: turn the extra tool bundle on or off
 - `--dry-run`: validate config, inputs, and dependencies without submitting jobs
 - `--is-agar-project auto|1|0`: control AGAR-specific normalization and filtering
@@ -361,6 +365,17 @@ Place **one concatenated, compressed ONT FASTQ per sample** in the input
 directory. The filename without `.fastq.gz` or `.fq.gz` becomes the sample name
 and must match `Sample name` in the required `*_samplesheet.txt`. The wrapper
 creates `samplesheet.ont.fofn` automatically.
+
+To avoid wasting compute on controls (the ONT `unclassified` barcode bin, Lambda
+spike-ins, negative controls), drop them with `--exclude-samples`:
+
+```bash
+./bin/agar-bactopia submit local --input-type ont \
+  --exclude-samples 'unclassified|lambda|neg' \
+  /path/to/ont_fastqs /path/to/metadata /path/to/results_ont 25
+```
+
+Matching is case-insensitive; excluded samples are logged and never assembled.
 
 If a sample's reads are split across several FASTQ chunks (e.g. per-barcode
 run folders), **concatenate them into one file yourself before submission** —

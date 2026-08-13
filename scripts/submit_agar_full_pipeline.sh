@@ -140,6 +140,7 @@ ont_minlength_override=
 ont_minqual_override=
 use_porechop_override=
 genome_size_override=
+exclude_samples_override=
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -182,6 +183,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --genome-size)
       genome_size_override=$2
+      shift 2
+      ;;
+    --exclude-samples)
+      exclude_samples_override=$2
       shift 2
       ;;
     --help|-h)
@@ -249,6 +254,12 @@ if [[ -n $genome_size && ! $genome_size =~ ^[1-9][0-9]*$ ]]; then
   echo "--genome-size / GENOME_SIZE must be a positive integer (bp), e.g. 5000000. 0 is invalid: Bactopia subsamples reads to (coverage x genome_size), so tiny values delete your data instead of disabling QC. To relax the QC gates, set EXTRA_ARGS_STRING='--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0'." >&2
   exit 1
 fi
+
+# Optional regex of sample names to exclude from the run (e.g. ONT controls like
+# unclassified / Lambda / NEG) so they are never batched or assembled. Matched
+# case-insensitively against the sample column of the manifest. The
+# --exclude-samples flag takes precedence over EXCLUDE_SAMPLE_REGEX (env/site config).
+exclude_sample_regex=${exclude_samples_override:-${EXCLUDE_SAMPLE_REGEX:-}}
 
 run_agar_dir=${RUN_AGAR_DIR:-$(cd "$script_dir/.." && pwd)}
 
@@ -1253,6 +1264,28 @@ fi
 
 if [[ $postprocess_only != 1 && ! -f $samplesheet_path ]]; then
   fail "Bactopia ${input_type} input manifest not found: $samplesheet_path"
+fi
+
+# Drop excluded samples (e.g. ONT controls) before validation/batching so they are
+# never assembled. Filters to a sibling *.filtered.fofn, leaving the original
+# manifest intact; the filtered manifest is used for the rest of the run. Applies to
+# any FOFN-based input (illumina/ont/assembly), not accession lists.
+if [[ $postprocess_only != 1 && -n $exclude_sample_regex && $input_type != "accession" && -f $samplesheet_path ]]; then
+  current_step="excluding samples matching EXCLUDE_SAMPLE_REGEX"
+  lc_exclude_regex=$(printf '%s' "$exclude_sample_regex" | tr '[:upper:]' '[:lower:]')
+  excluded_names=$(awk -F'\t' -v re="$lc_exclude_regex" 'NR>1 && tolower($1) ~ re {print $1}' "$samplesheet_path")
+  if [[ -n $excluded_names ]]; then
+    filtered_samplesheet="${samplesheet_path%.fofn}.filtered.fofn"
+    awk -F'\t' -v re="$lc_exclude_regex" 'NR==1 || tolower($1) !~ re' "$samplesheet_path" > "$filtered_samplesheet"
+    remaining=$(( $(awk 'END {print NR + 0}' "$filtered_samplesheet") - 1 ))
+    excluded_list=$(printf '%s' "$excluded_names" | tr '\n' ' ')
+    log "INFO" "Excluding sample(s) matching EXCLUDE_SAMPLE_REGEX='$exclude_sample_regex': $excluded_list"
+    [[ $remaining -ge 1 ]] || fail "EXCLUDE_SAMPLE_REGEX='$exclude_sample_regex' excluded every sample; nothing left to run."
+    samplesheet_path=$filtered_samplesheet
+    log "INFO" "Using filtered manifest with $remaining sample(s): $samplesheet_path"
+  else
+    log "INFO" "EXCLUDE_SAMPLE_REGEX='$exclude_sample_regex' matched no samples in: $samplesheet_path"
+  fi
 fi
 
 if [[ $postprocess_only != 1 && $skip_validate != 1 ]]; then

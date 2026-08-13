@@ -27,6 +27,9 @@ Options:
                                 QC gates set EXTRA_ARGS_STRING (e.g. --coverage 0
                                 --min_coverage 0 --min_basepairs 0 --min_reads 0);
                                 --min_coverage 0 disables the 10x coverage gate.
+  --exclude-samples REGEX       Skip samples whose name matches REGEX (case-
+                                insensitive), e.g. 'unclassified|lambda|neg' to drop
+                                ONT controls so they are never assembled.
   --dry-run                    Validate config, inputs, and dependencies without submitting jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF
@@ -47,6 +50,7 @@ ont_minlength_override=
 ont_minqual_override=
 use_porechop_override=
 genome_size_override=
+exclude_samples_override=
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -84,6 +88,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --genome-size)
       genome_size_override=$2
+      shift 2
+      ;;
+    --exclude-samples)
+      exclude_samples_override=$2
       shift 2
       ;;
     --is-agar-project)
@@ -183,6 +191,7 @@ for numeric_option in "${medaka_rounds_override:-}" "${ont_minlength_override:-}
 done
 
 [[ -n $genome_size_override ]] && export GENOME_SIZE=$genome_size_override
+[[ -n $exclude_samples_override ]] && export EXCLUDE_SAMPLE_REGEX=$exclude_samples_override
 [[ -n $medaka_rounds_override ]] && export MEDAKA_ROUNDS=$medaka_rounds_override
 [[ -n $medaka_model_override ]] && export MEDAKA_MODEL=$medaka_model_override
 [[ -n $ont_minlength_override ]] && export ONT_MINLENGTH=$ont_minlength_override
