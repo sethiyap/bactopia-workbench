@@ -31,10 +31,10 @@ text = text.replace(
     "mv results/checkm.log ./",
     "mv results/checkm.log ./ || true",
 )
-text = text.replace(
-    "checkm: $(echo $(checkm -h 2>&1)",
-    "checkm: $( (checkm -h 2>&1 || true)",
-)
+# NOTE: deliberately do NOT touch the `checkm: $(echo $(checkm -h 2>&1) | sed ...)`
+# versions.yml line. The `echo $(...)` collapses checkm -h's multi-line output onto
+# one line before sed; removing it makes the checkm: value multi-line and breaks the
+# YAML that CUSTOM_DUMPSOFTWAREVERSIONS then parses. Bactopia's original line works.
 
 # CheckM's multiprocessing.Manager opens an AF_UNIX socket under TMPDIR. Our TMPDIR
 # ($NXF_WORK/tmp) is a deep path that, plus Python's pymp-*/listener-* suffix,
