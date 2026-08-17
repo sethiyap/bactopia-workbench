@@ -121,8 +121,12 @@ read_mlst_table <- function(path) {
     return(data.frame(stringsAsFactors = FALSE))
   }
 
+  # Any assembly filename token is a sample record boundary -- not just AGAR
+  # (NNGNB-NNN) names. The old AGAR-only pattern silently dropped every row of the
+  # headerless mlst.tsv for non-AGAR projects, leaving an empty consolidated MLST
+  # table. Match any non-path token ending in .fna/.fa/.fasta(.gz).
   is_sample_token <- function(x) {
-    grepl("^[0-9]{2}GNB-[0-9]+R?\\.(fna|fa|fasta)(\\.gz)?$", x, ignore.case = TRUE)
+    grepl("^[^/[:space:]]+\\.(fna|fa|fasta)(\\.gz)?$", x, ignore.case = TRUE)
   }
   is_batch_token <- function(x) grepl("^[[:alnum:]_]+_[0-9]{3}$", x)
   is_path_token <- function(x) grepl("^/", x)

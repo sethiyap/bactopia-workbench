@@ -405,8 +405,11 @@ read_mlst_table <- function(path) {
     return(NULL)
   }
 
+  # Any assembly filename token starts a sample record -- not just AGAR (NNGNB-NNN)
+  # names. The old AGAR-only pattern made this headerless-MLST fallback yield nothing
+  # for non-AGAR projects. Match any non-path token ending in .fna/.fa/.fasta(.gz).
   is_sample_token <- function(x) {
-    grepl("^[0-9]{2}GNB-[0-9]+R?\\.(fna|fa|fasta)(\\.gz)?$", x, ignore.case = TRUE)
+    grepl("^[^/[:space:]]+\\.(fna|fa|fasta)(\\.gz)?$", x, ignore.case = TRUE)
   }
 
   is_batch_token <- function(x) {
@@ -1031,13 +1034,14 @@ review_tail_cols <- c(
   "mlst_review_note"
 )
 
-front_cols <- setdiff(intersect(preferred_order, names(merged)), review_tail_cols)
 tail_cols <- intersect(review_tail_cols, names(merged))
-other_cols <- setdiff(names(merged), c("sample", front_cols, tail_cols))
 
-# Keep every tool's columns together in the final sheet. Any column not listed
-# in `preferred_order` (e.g. an extra field a tool emits) is grouped with its
-# tool by prefix, so same-tool columns stay contiguous instead of scattering.
+# Order the columns so every tool's columns form ONE contiguous block. For each tool
+# (in tool_prefix_order), its `preferred_order` columns come first (in that order),
+# then any extra columns it emitted (e.g. abritamr drug-class columns that vary per
+# run) in insertion order. Non-tool (metadata) columns lead; review/QC columns tail.
+# The previous "preferred columns up front, everything else grouped after" split a
+# tool whenever it had both listed and unlisted columns (e.g. abritamr around bracken).
 tool_prefix_order <- c(
   "mlst_",
   "kleborate_",
@@ -1046,15 +1050,34 @@ tool_prefix_order <- c(
   "plasmidfinder_",
   "bracken_"
 )
-tool_group_rank <- function(col) {
+col_tool_rank <- function(col) {
   hit <- which(vapply(tool_prefix_order, function(p) startsWith(col, p), logical(1)))
-  if (length(hit)) hit[[1L]] else length(tool_prefix_order) + 1L
+  if (length(hit)) hit[[1L]] else NA_integer_
 }
-other_rank <- vapply(other_cols, tool_group_rank, integer(1))
-# order() is stable via the trailing seq key, preserving within-tool insertion order.
-other_cols <- other_cols[order(other_rank, seq_along(other_cols))]
 
-merged <- merged[c(front_cols, other_cols, tail_cols)]
+# All columns to order, minus the internal `sample` key (display uses "Sample name")
+# and the review tail (kept out of tool grouping, appended at the very end).
+orderable <- setdiff(names(merged), c("sample", tail_cols))
+tool_rank <- vapply(orderable, col_tool_rank, integer(1))
+pref_pos <- seq_along(preferred_order)
+names(pref_pos) <- preferred_order
+
+# Metadata columns (no tool prefix): preferred ones in preferred_order, then the rest.
+meta_cols <- orderable[is.na(tool_rank)]
+meta_pref <- intersect(preferred_order, meta_cols)
+meta_cols <- c(meta_pref, setdiff(meta_cols, meta_pref))
+
+# Per-tool blocks: preferred columns first (by preferred_order), then extras.
+tool_block <- character(0)
+for (ti in seq_along(tool_prefix_order)) {
+  cols_t <- orderable[!is.na(tool_rank) & tool_rank == ti]
+  if (!length(cols_t)) next
+  pr <- pref_pos[cols_t]
+  ord <- order(ifelse(is.na(pr), Inf, pr), seq_along(cols_t))
+  tool_block <- c(tool_block, cols_t[ord])
+}
+
+merged <- merged[c(meta_cols, tool_block, tail_cols)]
 
 write_tsv_flex(merged, output_file)
 message("Wrote merged table: ", normalizePath(output_file, winslash = "/", mustWork = FALSE))
