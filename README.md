@@ -527,7 +527,40 @@ dependencies without submitting any scheduler jobs.
   50
 ```
 
-### Turn On The Additional Tools Bundle
+### Tools: default vs additional
+
+**Default tools** — always run (`RUN_TOOLS=1`, `DEFAULT_TOOLS_STRING`):
+
+| Tool | Purpose |
+|------|---------|
+| `mlst` | Multi-locus sequence typing (scheme, ST, allele profile) |
+| `amrfinderplus` | AMR genes + point mutations (NCBI) |
+| `abritamr` | Curated AMRFinderPlus summary by drug class |
+| `plasmidfinder` | Plasmid replicon typing |
+| `bracken` | Species abundance (from Kraken2; needs `KRAKEN2_DB`) |
+| `checkm` | Assembly completeness / contamination QC |
+
+**Kleborate** runs by default too (`RUN_KLEBORATE=1`) but as its own stage —
+*Klebsiella*-focused typing. **FimTyper** is opt-in (`RUN_FIMTYPER=0`) — *E. coli*
+FimH typing (needs a container or native `FIMTYPER_DIR`/`FIMTYPER_ENV`).
+
+**Additional tools** — opt-in bundle (`RUN_ADDITIONAL_TOOLS=0`,
+`ADDITIONAL_TOOLS_STRING`), enabled with `--additional-tools yes`:
+
+| Tool | Focus |
+|------|-------|
+| `ectyper` | *E. coli* O/H serotyping |
+| `shigapass`, `shigatyper`, `shigeifinder` | *Shigella* / EIEC typing |
+| `mobsuite` | Plasmid reconstruction / typing |
+| `mashdist` | Mash distance (relatedness) |
+| `mykrobe` | AMR / lineage (needs `MYKROBE_SPECIES`) |
+| `defensefinder` | Anti-phage defense systems (optional `DEFENSEFINDER_DB`) |
+| `ismapper` | Insertion-sequence mapping |
+| `phispy` | Prophage detection |
+
+Many additional tools are species-specific (e.g. `ectyper`, `shiga*`) and return
+nothing outside their target organism. Customize either set per run without editing
+defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder checkm"`.
 
 ```bash
 ./bin/agar-bactopia submit gadi \
