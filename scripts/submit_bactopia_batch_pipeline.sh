@@ -275,6 +275,20 @@ if [[ $RUN_TOOLS != 0 ]]; then
     TOOLS_LIST=("${filtered_tools[@]}")
     TOOLS_STRING="${TOOLS_LIST[*]}"
   fi
+
+  # ismapper maps insertion sequences from Illumina paired-end reads. Its Bactopia
+  # module assumes that input shape and fails (BlankSeparatedList.getName()) on
+  # single-end/ONT or assembly input, which has no paired reads. Drop it for any
+  # non-Illumina input so --additional-tools yes doesn't trip over it.
+  if [[ ${BACTOPIA_INPUT_MODE:-illumina} != "illumina" ]] && tools_string_contains "ismapper" "${TOOLS_LIST[@]}"; then
+    echo "Input type '${BACTOPIA_INPUT_MODE:-illumina}' is not Illumina paired-end; skipping ismapper (it requires Illumina reads)." >&2
+    filtered_tools=()
+    for _tool in "${TOOLS_LIST[@]}"; do
+      [[ $_tool == "ismapper" ]] || filtered_tools+=("$_tool")
+    done
+    TOOLS_LIST=("${filtered_tools[@]}")
+    TOOLS_STRING="${TOOLS_LIST[*]}"
+  fi
 fi
 
 "$script_dir/split_bactopia_samplesheet.sh" "$input_file" "$batch_size" "$BATCH_DIR" "$BATCH_PREFIX" >/tmp/bactopia_batch_split.$$ 
