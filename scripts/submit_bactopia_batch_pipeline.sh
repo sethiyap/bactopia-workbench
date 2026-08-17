@@ -262,9 +262,18 @@ if [[ $RUN_TOOLS != 0 ]]; then
     exit 1
   fi
 
+  # mykrobe needs a species panel. run_extra_bactopia_tools.pbs already skips mykrobe
+  # when MYKROBE_SPECIES is unset, so drop it here (with a warning) instead of failing
+  # the whole run -- otherwise --additional-tools yes is unusable without MYKROBE_SPECIES,
+  # even though mykrobe applies to only a few species (staph/tb/typhi/sonnei).
   if [[ -z $MYKROBE_SPECIES ]] && tools_string_contains "mykrobe" "${TOOLS_LIST[@]}"; then
-    echo "MYKROBE_SPECIES is required when TOOLS_STRING includes mykrobe." >&2
-    exit 1
+    echo "MYKROBE_SPECIES not set; skipping mykrobe (set MYKROBE_SPECIES to enable it)." >&2
+    filtered_tools=()
+    for _tool in "${TOOLS_LIST[@]}"; do
+      [[ $_tool == "mykrobe" ]] || filtered_tools+=("$_tool")
+    done
+    TOOLS_LIST=("${filtered_tools[@]}")
+    TOOLS_STRING="${TOOLS_LIST[*]}"
   fi
 fi
 
