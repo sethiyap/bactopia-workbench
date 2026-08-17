@@ -259,6 +259,23 @@ fi
 TOOLS_LIST=($TOOLS_STRING)
 
 if [[ $RUN_TOOLS != 0 ]]; then
+  # kraken2/bracken classify sequencing reads. Assembly input has no reads, so they
+  # produce nothing (and would otherwise demand a KRAKEN2_DB for no benefit). Drop
+  # them for assembly input, before the KRAKEN2_DB check below.
+  if [[ ${BACTOPIA_INPUT_MODE:-illumina} == "assembly" ]]; then
+    filtered_tools=()
+    for _tool in "${TOOLS_LIST[@]}"; do
+      case "$_tool" in
+        bracken|kraken2)
+          echo "Input type 'assembly' has no reads; skipping ${_tool} (it requires reads)." >&2
+          ;;
+        *) filtered_tools+=("$_tool") ;;
+      esac
+    done
+    TOOLS_LIST=("${filtered_tools[@]}")
+    TOOLS_STRING="${TOOLS_LIST[*]}"
+  fi
+
   if [[ -z $KRAKEN2_DB ]] && ( tools_string_contains "kraken2" "${TOOLS_LIST[@]}" || tools_string_contains "bracken" "${TOOLS_LIST[@]}" ); then
     echo "KRAKEN2_DB is required when TOOLS_STRING includes kraken2 or bracken." >&2
     exit 1

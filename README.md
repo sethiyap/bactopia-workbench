@@ -489,6 +489,32 @@ creates `samplesheet.assembly.fofn` automatically.
 Bactopia receives these as assembly inputs. It does not run read QC, Flye,
 Racon, or Medaka on them.
 
+Because there are no reads with assembly input:
+
+- **No genome-size / coverage flags are needed** — `GENOME_SIZE`,
+  `EXTRA_ARGS_STRING="--coverage 0 …"` etc. don't apply (there's no read QC gate).
+- **Read-based tools can't run.** `bracken`/`kraken2` require reads, so they are
+  **automatically dropped** for assembly input (you'll see `Input type 'assembly'
+  has no reads; skipping bracken …`). `mykrobe` needs reads too, and `ismapper`
+  needs Illumina reads — both are skipped as well.
+- **Assembly-based tools all work**: `mlst`, `checkm`, `abritamr`, `amrfinderplus`,
+  `plasmidfinder`, plus `kleborate`, `fimtyper`, ST131Typer, and (with
+  `--additional-tools yes`) `mobsuite`, `phispy`, `ectyper`, `shiga*`, `defensefinder`.
+
+A complete local example (controls excluded, optional typers on):
+
+```bash
+EXCLUDE_SAMPLE_REGEX='unclassified|lambda|neg' \
+RUN_FIMTYPER=1 RUN_ST131_TYPER=1 \
+./bin/agar-bactopia submit local \
+  --input-type assembly \
+  --site-config config/sites/local.local.env \
+  /path/to/assemblies \
+  /path/to/metadata \
+  /path/to/results_assemblies \
+  25
+```
+
 ### Submit SRA/ENA Or NCBI Assembly Accessions
 
 Create a plain, headerless text file with one accession per line (SRA/ENA read
