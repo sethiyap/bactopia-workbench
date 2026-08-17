@@ -53,6 +53,7 @@ INCLUDE_FILE=${INCLUDE_FILE:-}
 MYKROBE_SPECIES=${MYKROBE_SPECIES:-}
 KRAKEN2_DB=${KRAKEN2_DB:-}
 DEFENSEFINDER_DB=${DEFENSEFINDER_DB:-}
+MASH_SKETCH=${MASH_SKETCH:-}
 ###############################################################################
 
 mkdir -p "$SCRATCH_RUN" "$RESULTS_OUT" "$SING_CACHE"
@@ -126,6 +127,13 @@ for tool in "${TOOLS[@]}"; do
         continue
       fi
       EXTRA_ARGS+=(--kraken2_db "$KRAKEN2_DB")
+      ;;
+    mashdist)
+      if [[ -z "${MASH_SKETCH}" ]]; then
+        echo "Skipping mashdist: set MASH_SKETCH to a reference Mash sketch (.msh) first." >&2
+        continue
+      fi
+      EXTRA_ARGS+=(--mash_sketch "$MASH_SKETCH")
       ;;
     defensefinder)
       if [[ -n "${DEFENSEFINDER_DB}" ]]; then

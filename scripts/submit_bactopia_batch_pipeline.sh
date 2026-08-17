@@ -34,6 +34,7 @@ Environment variables:
                           and additional bundles when set.
   KRAKEN2_DB              Required if TOOLS_STRING includes kraken2 or bracken
   MYKROBE_SPECIES         Required if TOOLS_STRING includes mykrobe
+  MASH_SKETCH             Required if TOOLS_STRING includes mashdist (reference .msh)
   DEFENSEFINDER_DB        Optional database path for defensefinder
   RUN_KLEBORATE           Default: 1
   RUN_FIMTYPER            Default: 0
@@ -120,6 +121,7 @@ TOOLS_STRING=${TOOLS_STRING:-}
 KRAKEN2_DB=${KRAKEN2_DB:-}
 MYKROBE_SPECIES=${MYKROBE_SPECIES:-}
 DEFENSEFINDER_DB=${DEFENSEFINDER_DB:-}
+MASH_SKETCH=${MASH_SKETCH:-}
 RUN_KLEBORATE=${RUN_KLEBORATE:-1}
 RUN_FIMTYPER=${RUN_FIMTYPER:-0}
 FIMTYPER_PIPELINE=${FIMTYPER_PIPELINE:-}
@@ -289,6 +291,19 @@ if [[ $RUN_TOOLS != 0 ]]; then
     TOOLS_LIST=("${filtered_tools[@]}")
     TOOLS_STRING="${TOOLS_LIST[*]}"
   fi
+
+  # mashdist requires a reference Mash sketch (--mash_sketch <.msh>); without it
+  # Bactopia's parameter validation fails before any process runs (errorStrategy
+  # cannot catch that). Skip it (with a warning) unless MASH_SKETCH is set.
+  if [[ -z $MASH_SKETCH ]] && tools_string_contains "mashdist" "${TOOLS_LIST[@]}"; then
+    echo "MASH_SKETCH not set; skipping mashdist (set MASH_SKETCH to a reference Mash sketch .msh to enable it)." >&2
+    filtered_tools=()
+    for _tool in "${TOOLS_LIST[@]}"; do
+      [[ $_tool == "mashdist" ]] || filtered_tools+=("$_tool")
+    done
+    TOOLS_LIST=("${filtered_tools[@]}")
+    TOOLS_STRING="${TOOLS_LIST[*]}"
+  fi
 fi
 
 "$script_dir/split_bactopia_samplesheet.sh" "$input_file" "$batch_size" "$BATCH_DIR" "$BATCH_PREFIX" >/tmp/bactopia_batch_split.$$ 
@@ -409,7 +424,7 @@ for batch_file in "${selected_batch_files[@]}"; do
         tool_job_id=$(scheduler_submit \
           "$parallel_tool_job_name" \
           "$assembly_job" \
-          "BASE_DIR=${BASE_DIR},RESULTS_MAIN=${results_main},RUN_LABEL=${parallel_tool_run_label},RESULTS_OUT=${tools_outdir},RESULTS_ROOT=${RESULTS_ROOT},TOOLS_STRING=${tool},KRAKEN2_DB=${KRAKEN2_DB},MYKROBE_SPECIES=${MYKROBE_SPECIES},DEFENSEFINDER_DB=${DEFENSEFINDER_DB},NEXTFLOW_CONFIG=${NEXTFLOW_CONFIG},BACTOPIA_PIPELINE=${BACTOPIA_PIPELINE},DATASETS_CACHE=${DATASETS_CACHE},SING_CACHE=${SING_CACHE}" \
+          "BASE_DIR=${BASE_DIR},RESULTS_MAIN=${results_main},RUN_LABEL=${parallel_tool_run_label},RESULTS_OUT=${tools_outdir},RESULTS_ROOT=${RESULTS_ROOT},TOOLS_STRING=${tool},KRAKEN2_DB=${KRAKEN2_DB},MYKROBE_SPECIES=${MYKROBE_SPECIES},DEFENSEFINDER_DB=${DEFENSEFINDER_DB},MASH_SKETCH=${MASH_SKETCH},NEXTFLOW_CONFIG=${NEXTFLOW_CONFIG},BACTOPIA_PIPELINE=${BACTOPIA_PIPELINE},DATASETS_CACHE=${DATASETS_CACHE},SING_CACHE=${SING_CACHE}" \
           "$script_dir/run_extra_bactopia_tools.pbs" \
           "$PBS_LOG_DIR" \
           "$PBS_MAIL_OPTIONS" \
@@ -425,7 +440,7 @@ for batch_file in "${selected_batch_files[@]}"; do
       tools_job=$(scheduler_submit \
         "$tools_job_name" \
         "$assembly_job" \
-        "BASE_DIR=${BASE_DIR},RESULTS_MAIN=${results_main},RUN_LABEL=${run_label}_tools,RESULTS_OUT=${tools_outdir},RESULTS_ROOT=${RESULTS_ROOT},TOOLS_STRING=${TOOLS_STRING},KRAKEN2_DB=${KRAKEN2_DB},MYKROBE_SPECIES=${MYKROBE_SPECIES},DEFENSEFINDER_DB=${DEFENSEFINDER_DB},NEXTFLOW_CONFIG=${NEXTFLOW_CONFIG},BACTOPIA_PIPELINE=${BACTOPIA_PIPELINE},DATASETS_CACHE=${DATASETS_CACHE},SING_CACHE=${SING_CACHE}" \
+        "BASE_DIR=${BASE_DIR},RESULTS_MAIN=${results_main},RUN_LABEL=${run_label}_tools,RESULTS_OUT=${tools_outdir},RESULTS_ROOT=${RESULTS_ROOT},TOOLS_STRING=${TOOLS_STRING},KRAKEN2_DB=${KRAKEN2_DB},MYKROBE_SPECIES=${MYKROBE_SPECIES},DEFENSEFINDER_DB=${DEFENSEFINDER_DB},MASH_SKETCH=${MASH_SKETCH},NEXTFLOW_CONFIG=${NEXTFLOW_CONFIG},BACTOPIA_PIPELINE=${BACTOPIA_PIPELINE},DATASETS_CACHE=${DATASETS_CACHE},SING_CACHE=${SING_CACHE}" \
         "$script_dir/run_extra_bactopia_tools.pbs" \
         "$PBS_LOG_DIR" \
         "$PBS_MAIL_OPTIONS" \
