@@ -1185,8 +1185,8 @@ if [[ $postprocess_only != 1 ]]; then
       [[ $input_count -gt 0 ]] || fail "No compressed ONT FASTQ files were found in: $input_source"
       ;;
     assembly)
-      input_count=$(find "$input_source" -maxdepth 1 -type f \( -name "*.fasta.gz" -o -name "*.fna.gz" -o -name "*.fa.gz" \) | wc -l | tr -d ' ')
-      [[ $input_count -gt 0 ]] || fail "No compressed assembly FASTA files were found in: $input_source"
+      input_count=$(find "$input_source" -maxdepth 1 -type f \( -name "*.fasta.gz" -o -name "*.fna.gz" -o -name "*.fa.gz" -o -name "*.fasta" -o -name "*.fna" -o -name "*.fa" \) | wc -l | tr -d ' ')
+      [[ $input_count -gt 0 ]] || fail "No assembly FASTA files (*.fasta[.gz], *.fna[.gz], *.fa[.gz]) were found in: $input_source"
       ;;
     accession)
       input_count=$(awk 'NF {count++} END {print count + 0}' "$input_source")

@@ -473,9 +473,13 @@ they flag shallow samples without excluding them. See [Outputs](#outputs).
 
 ### Submit Local Assemblies
 
-The assembly directory may contain `.fasta.gz`, `.fna.gz`, or `.fa.gz` files.
-The filename without the FASTA extension becomes the sample name; the wrapper
-creates `samplesheet.assembly.fofn` automatically.
+The assembly directory may contain `.fasta`, `.fna`, `.fa` files **or** their
+gzipped forms (`.fasta.gz`, `.fna.gz`, `.fa.gz`). Uncompressed assemblies are
+gzipped into a `staged_assemblies/` folder next to the manifest (your files are
+left as-is), since Bactopia expects gzipped input — so the pipeline's own
+uncompressed `*_assemblies/` output works directly here. The filename without the
+FASTA extension becomes the sample name; the wrapper creates
+`samplesheet.assembly.fofn` automatically.
 
 ```bash
 ./bin/agar-bactopia submit gadi \

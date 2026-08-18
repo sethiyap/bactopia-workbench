@@ -43,7 +43,9 @@ case "$input_type" in
     find "$input_dir" -maxdepth 1 -type f \( -name '*.fastq.gz' -o -name '*.fq.gz' \) | sort > "$paths_file"
     ;;
   assembly)
-    find "$input_dir" -maxdepth 1 -type f \( -name '*.fasta.gz' -o -name '*.fna.gz' -o -name '*.fa.gz' \) | sort > "$paths_file"
+    find "$input_dir" -maxdepth 1 -type f \( \
+      -name '*.fasta.gz' -o -name '*.fna.gz' -o -name '*.fa.gz' \
+      -o -name '*.fasta' -o -name '*.fna' -o -name '*.fa' \) | sort > "$paths_file"
     ;;
 esac
 
@@ -72,6 +74,9 @@ while IFS= read -r input_path; do
       sample=${sample%.fasta.gz}
       sample=${sample%.fna.gz}
       sample=${sample%.fa.gz}
+      sample=${sample%.fasta}
+      sample=${sample%.fna}
+      sample=${sample%.fa}
       ;;
   esac
 
@@ -86,7 +91,21 @@ while IFS= read -r input_path; do
   seen_samples+=("$sample")
 
   if [[ $input_type == "assembly" ]]; then
-    printf '%s\tassembly\t\t\t%s\n' "$sample" "$input_path" >> "$tmp_file"
+    case "$input_path" in
+      *.gz)
+        assembly_path=$input_path
+        ;;
+      *)
+        # Bactopia expects gzipped assemblies. gzip a copy of the uncompressed input
+        # into a staging dir next to the manifest (the user's files are left as-is),
+        # so both compressed and uncompressed assemblies work as --input-type assembly.
+        staging_dir="$(dirname "$output_file")/staged_assemblies"
+        mkdir -p "$staging_dir"
+        assembly_path="$staging_dir/${filename}.gz"
+        gzip -c "$input_path" > "$assembly_path"
+        ;;
+    esac
+    printf '%s\tassembly\t\t\t%s\n' "$sample" "$assembly_path" >> "$tmp_file"
   else
     printf '%s\tont\t%s\t\t\n' "$sample" "$input_path" >> "$tmp_file"
   fi
@@ -96,7 +115,7 @@ done < "$paths_file"
 if [[ $count -eq 0 ]]; then
   case "$input_type" in
     ont) echo "No compressed ONT FASTQ files (*.fastq.gz or *.fq.gz) found in: $input_dir" >&2 ;;
-    assembly) echo "No compressed assemblies (*.fasta.gz, *.fna.gz, or *.fa.gz) found in: $input_dir" >&2 ;;
+    assembly) echo "No assemblies (*.fasta[.gz], *.fna[.gz], or *.fa[.gz]) found in: $input_dir" >&2 ;;
   esac
   exit 1
 fi
