@@ -296,11 +296,12 @@ if [[ $RUN_TOOLS != 0 ]]; then
   fi
 
   # ismapper maps insertion sequences from Illumina paired-end reads. Its Bactopia
-  # module assumes that input shape and fails (BlankSeparatedList.getName()) on
-  # single-end/ONT or assembly input, which has no paired reads. Drop it for any
-  # non-Illumina input so --additional-tools yes doesn't trip over it.
-  if [[ ${BACTOPIA_INPUT_MODE:-illumina} != "illumina" ]] && tools_string_contains "ismapper" "${TOOLS_LIST[@]}"; then
-    echo "Input type '${BACTOPIA_INPUT_MODE:-illumina}' is not Illumina paired-end; skipping ismapper (it requires Illumina reads)." >&2
+  # module assumes that input shape and fails (BlankSeparatedList.getName()) on ONT
+  # (single-end) or assembly (no reads) input. Drop it there. Keep it for illumina
+  # and for accession input -- SRA/ENA read accessions can be paired-end Illumina,
+  # for which ismapper works.
+  if [[ ${BACTOPIA_INPUT_MODE:-illumina} == "ont" || ${BACTOPIA_INPUT_MODE:-illumina} == "assembly" ]] && tools_string_contains "ismapper" "${TOOLS_LIST[@]}"; then
+    echo "Input type '${BACTOPIA_INPUT_MODE:-illumina}' has no paired-end reads; skipping ismapper (it requires Illumina paired-end reads)." >&2
     filtered_tools=()
     for _tool in "${TOOLS_LIST[@]}"; do
       [[ $_tool == "ismapper" ]] || filtered_tools+=("$_tool")
