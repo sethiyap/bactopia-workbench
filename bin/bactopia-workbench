@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./bin/bactopia-workbench submit gadi [--input-type illumina|ont|assembly|accession] INPUT_SOURCE METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --input-type ont --medaka-rounds 1 --medaka-model MODEL INPUT_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --input-type assembly ASSEMBLY_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --input-type accession ACCESSIONS.txt METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --additional-tools yes RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --dry-run RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --is-agar-project 0 RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --mail-user you@example.org [--mail-options ae] RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit slurm RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit slurm --dry-run RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit slurm --site-config config/sites/slurm.local.env RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit local RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit local --dry-run RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit local --site-config config/sites/local.local.env RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+EOF
+}
+
+bin_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+project_root=$(cd "$bin_dir/.." && pwd)
+
+if [[ $# -lt 2 ]]; then
+  usage >&2
+  exit 1
+fi
+
+command=$1
+backend=$2
+shift 2
+
+case "$command:$backend" in
+  submit:gadi)
+    exec "$project_root/wrappers/submit.gadi.sh" "$@"
+    ;;
+  submit:slurm)
+    exec "$project_root/wrappers/submit.slurm.sh" "$@"
+    ;;
+  submit:local)
+    exec "$project_root/wrappers/submit.local.sh" "$@"
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,17 +1,17 @@
 # Runtime Dependencies
 
 This project ships the orchestration scripts, PBS wrappers, small config files,
-and helper logic needed to run the AGAR Bactopia workflow.
+and helper logic needed to run the Bactopia Workbench workflow.
 
 ## Bundled In This Repo
 
-- `bin/agar-bactopia`
+- `bin/bactopia-workbench`
 - `wrappers/submit.gadi.sh`
 - `wrappers/submit.slurm.sh`
 - `config/defaults.env`
 - `config/sites/gadi.env.example`
 - `config/sites/slurm.env.example`
-- `scripts/submit_agar_full_pipeline.sh`
+- `scripts/submit_workbench_pipeline.sh`
 - `scripts/submit_bactopia_batch_pipeline.sh`
 - PBS wrappers under `scripts/*.pbs`
 - Slurm wrappers under `scripts/*.slurm`
@@ -77,7 +77,7 @@ and `ST131_TYPER_SCRIPT`.
 
 The packaged workflow includes a phenotype-guided MLST review stage.
 
-- `map_agrf_samplesheet_results.R` writes the main AGRF-mapped results table and
+- `map_samplesheet_results.R` writes the main AGRF-mapped results table and
   a review-only subset called
   `<prefix>_samplesheet_with_results_review_required.tsv`
 - a sample is flagged for review when the canonicalized AGRF phenotype in

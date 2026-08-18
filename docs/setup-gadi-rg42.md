@@ -11,7 +11,7 @@ the rg42-specific operational steps.
 
 ## Important Shared Paths
 
-- pipeline code: `/g/data/rg42/agar-bactopia-pipeline`
+- pipeline code: `/g/data/rg42/bactopia-workbench`
 - AGAR raw data: `/scratch/rg42/AGAR/raw_data`
 - AGAR metadata: `/scratch/rg42/AGAR/metadata`
 - AGAR intermediates and results: `/scratch/rg42/AGAR/intermediates`
@@ -35,7 +35,7 @@ Use one of the two options below.
 ```bash
 cd /home/562/<nci_username>
 
-/g/data/rg42/agar-bactopia-pipeline/scripts/download_agrf_to_gadi.sh \
+/g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
   user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5 \
   2025 \
   B07
@@ -60,7 +60,7 @@ Useful notes:
 cd /home/562/<nci_username>
 
 RDS_SFTP_USER=<your_rds_username> \
-/g/data/rg42/agar-bactopia-pipeline/scripts/copy_RDS_to_GADI.sh \
+/g/data/rg42/bactopia-workbench/scripts/copy_RDS_to_GADI.sh \
   /rds/PRJ-AGAR/PRJ-AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5 \
   /scratch/rg42/AGAR/raw_data/2025/B07
 ```
@@ -75,7 +75,7 @@ cd /home/562/<nci_username>
 
 RDS_SFTP_USER=<your_rds_username> \
 RDS_SFTP_USE_PASSWORD=1 \
-/g/data/rg42/agar-bactopia-pipeline/scripts/copy_RDS_to_GADI.sh \
+/g/data/rg42/bactopia-workbench/scripts/copy_RDS_to_GADI.sh \
   /rds/PRJ-AGAR/PRJ-AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5 \
   /scratch/rg42/AGAR/raw_data/2025/B07
 ```
@@ -108,14 +108,14 @@ The metadata sheet rules are universal — see
 The shared install is expected at:
 
 ```bash
-/g/data/rg42/agar-bactopia-pipeline
+/g/data/rg42/bactopia-workbench
 ```
 
 If it has not been installed yet on Gadi, a short shared install is:
 
 ```bash
 cd /g/data/rg42
-git clone https://github.com/sethiyap/agar-bactopia-pipeline.git agar-bactopia-pipeline
+git clone https://github.com/sethiyap/bactopia-workbench.git bactopia-workbench
 cd /home/562/<nci_username>
 ```
 
@@ -128,8 +128,8 @@ If the shared `rg42` install has already been configured, you can skip this. If
 you are maintaining the install, create and review the local Gadi site config:
 
 ```bash
-cp /g/data/rg42/agar-bactopia-pipeline/config/sites/gadi.env.example \
-  /g/data/rg42/agar-bactopia-pipeline/config/sites/gadi.local.env
+cp /g/data/rg42/bactopia-workbench/config/sites/gadi.env.example \
+  /g/data/rg42/bactopia-workbench/config/sites/gadi.local.env
 ```
 
 Then confirm these keys in `config/sites/gadi.local.env` are correct:
@@ -145,7 +145,7 @@ Then confirm these keys in `config/sites/gadi.local.env` are correct:
 - `SING_CACHE`
 
 If `DATASETS_CACHE` does not exist yet, download the custom datasets with
-`/g/data/rg42/agar-bactopia-pipeline/scripts/download_bactopia_datasets.sh`
+`/g/data/rg42/bactopia-workbench/scripts/download_bactopia_datasets.sh`
 (reuses an existing cache if present). See
 [docs/bactopia-setup.md](bactopia-setup.md) for details.
 
@@ -158,7 +158,7 @@ submission looks like:
 ```bash
 cd /home/562/<nci_username>
 
-/g/data/rg42/agar-bactopia-pipeline/bin/agar-bactopia submit gadi \
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
   /scratch/rg42/AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5 \
   /scratch/rg42/AGAR/metadata/2025/B07 \
   /scratch/rg42/AGAR/intermediates/2025/B07 \
@@ -188,7 +188,7 @@ export RDS_SFTP_USER=<your_rds_username>
 export DEBUG_LOG_DIR=/scratch/rg42/${USER}/transfer_logs
 export RDS_UPLOAD_MANIFEST_DIR=/scratch/rg42/${USER}/.rds_transfer_manifests
 mkdir -p "$DEBUG_LOG_DIR" "$RDS_UPLOAD_MANIFEST_DIR"
-qsub -V /g/data/rg42/agar-bactopia-pipeline/scripts/jobsubmission_transfer_gadi_to_rds.pbs
+qsub -V /g/data/rg42/bactopia-workbench/scripts/jobsubmission_transfer_gadi_to_rds.pbs
 ```
 
 Or use password auth from a login shell:
@@ -201,7 +201,7 @@ export RDS_SFTP_USE_PASSWORD=1
 export DEBUG_LOG_DIR=/scratch/rg42/${USER}/transfer_logs
 export RDS_UPLOAD_MANIFEST_DIR=/scratch/rg42/${USER}/.rds_transfer_manifests
 mkdir -p "$DEBUG_LOG_DIR" "$RDS_UPLOAD_MANIFEST_DIR"
-/g/data/rg42/agar-bactopia-pipeline/scripts/submit_transfer_gadi_to_rds.sh
+/g/data/rg42/bactopia-workbench/scripts/submit_transfer_gadi_to_rds.sh
 ```
 
 Copy only the main deliverables first:
@@ -216,7 +216,7 @@ export RDS_INCLUDE_DIRS='<prefix>_samplesheet_with_results.tsv,batch_bactopia_co
 export DEBUG_LOG_DIR=/scratch/rg42/${USER}/transfer_logs
 export RDS_UPLOAD_MANIFEST_DIR=/scratch/rg42/${USER}/.rds_transfer_manifests
 mkdir -p "$DEBUG_LOG_DIR" "$RDS_UPLOAD_MANIFEST_DIR"
-qsub -V /g/data/rg42/agar-bactopia-pipeline/scripts/jobsubmission_transfer_gadi_to_rds.pbs
+qsub -V /g/data/rg42/bactopia-workbench/scripts/jobsubmission_transfer_gadi_to_rds.pbs
 ```
 
 Here, `<prefix>` means the part before `_samplesheet.txt` in your metadata

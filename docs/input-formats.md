@@ -40,7 +40,7 @@ The sheet needs two columns:
 - **column 2** — the organism/phenotype note used by MLST review logic
 
 How the mapper picks those columns
-([`map_agrf_samplesheet_results.R`](../scripts/map_agrf_samplesheet_results.R)):
+([`map_samplesheet_results.R`](../scripts/map_samplesheet_results.R)):
 
 - if headers `Sample name` **and** `Comments` are **both** present, they are
   used by name;
@@ -241,7 +241,7 @@ checks the manifest is well formed.
 metadata, FOFN handling, and key dependencies without submitting jobs:
 
 ```bash
-./bin/agar-bactopia submit gadi --dry-run \
+./bin/bactopia-workbench submit gadi --dry-run \
   INPUT_SOURCE METADATA_DIR RESULTS_ROOT 50
 ```
 

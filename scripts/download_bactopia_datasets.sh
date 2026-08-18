@@ -50,7 +50,7 @@ need_cmd() {
 }
 
 # Defaults. The datasets are published as a GitHub Release asset on this repo.
-repo="${BACTOPIA_DATASETS_REPO:-sethiyap/agar-bactopia-pipeline}"
+repo="${BACTOPIA_DATASETS_REPO:-sethiyap/bactopia-workbench}"
 tag="${BACTOPIA_DATASETS_TAG:-datasets-latest}"
 asset="${BACTOPIA_DATASETS_ASSET:-agar_bactopia_datasets.tar.gz}"
 url="${BACTOPIA_DATASETS_URL:-https://github.com/${repo}/releases/download/${tag}/${asset}}"

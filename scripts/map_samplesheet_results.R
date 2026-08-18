@@ -5,7 +5,7 @@ args <- commandArgs(trailingOnly = TRUE)
 usage <- function() {
   cat(
     "Usage:\n",
-    "  Rscript scripts/map_agrf_samplesheet_results.R",
+    "  Rscript scripts/map_samplesheet_results.R",
     " --agrf-sheet <metadata_samplesheet.txt>",
     " --consolidated-dir <dir>",
     " --output <file.tsv>\n",
