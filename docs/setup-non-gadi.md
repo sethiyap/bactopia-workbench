@@ -365,7 +365,7 @@ Once the container is in place, enable FimTyper with `RUN_FIMTYPER=1`.
 #### Maintainer: publishing the FimTyper image
 
 The auto-pull default works only once the image is published **and public**. The
-configs default to `oras://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.0`, so the
+configs default to `docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.0`, so the
 primary publish path reuses the proven rg42 `.sif`:
 
 - **Primary — ORAS-push the proven `.sif`** (matches the config default; no build
@@ -373,7 +373,7 @@ primary publish path reuses the proven rg42 `.sif`:
 
   ```bash
   singularity push /g/data/rg42/bactopia/caches/singularity/fimtyper.sif \
-    oras://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.0
+    docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.0
   ```
 
 - **Alternative — build from source (reproducible):** trigger the `build-fimtyper`
