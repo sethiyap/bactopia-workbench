@@ -1,9 +1,9 @@
-# agar-bactopia-pipeline
+# bactopia-workbench
 
-`agar-bactopia-pipeline` is an AGAR-compatible packaging of Bactopia for HPC
-use. It wraps submission, batching, result consolidation, metadata mapping,
-MLST review, workbook export, and optional ST131Typer follow-up into one
-workflow.
+`bactopia-workbench` is a Bactopia packaging for HPC that works with AGAR and
+non-AGAR bacterial-genomics projects alike. It wraps submission, batching, result
+consolidation, metadata mapping, MLST review, workbook export, and optional
+ST131Typer follow-up into one workflow.
 
 This page covers **how to use** the pipeline (the command, inputs, and outputs).
 For **setting up** an environment, pick the matching setup guide below.
@@ -100,7 +100,7 @@ the coloured shared lane and the ONT-only polishing box differ by input.
 
 ## Installation
 
-`agar-bactopia-pipeline` is a **clone-and-run** repository — there is no build
+`bactopia-workbench` is a **clone-and-run** repository — there is no build
 step and no `pip`/`conda` package to install. You clone it, then follow the setup
 guide for your environment ([Submission Modes](#submission-modes)) to install the
 external dependencies and write your site config.
@@ -108,14 +108,14 @@ external dependencies and write your site config.
 ### 1. Get the code
 
 ```bash
-git clone https://github.com/sethiyap/agar-bactopia-pipeline.git
-cd agar-bactopia-pipeline
-./bin/agar-bactopia            # prints usage; this is the entry point
+git clone https://github.com/sethiyap/bactopia-workbench.git
+cd bactopia-workbench
+./bin/bactopia-workbench            # prints usage; this is the entry point
 ```
 
-`bin/agar-bactopia` is the only entry point — run it in place, or add the repo's
+`bin/bactopia-workbench` is the only entry point — run it in place, or add the repo's
 `bin/` to your `PATH`. On the shared rg42 Gadi install it already lives at
-`/g/data/rg42/agar-bactopia-pipeline` (nothing to clone — see
+`/g/data/rg42/bactopia-workbench` (nothing to clone — see
 [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md)).
 
 ### 2. External dependencies (installed once per environment)
@@ -226,14 +226,14 @@ a single host with no scheduler — see
 [docs/setup-non-gadi.md](docs/setup-non-gadi.md#no-scheduler-use-the-local-backend)):
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   [OPTIONS] INPUT_SOURCE METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
 ```
 
 A minimal run with placeholder paths:
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -370,7 +370,7 @@ To avoid wasting compute on controls (the ONT `unclassified` barcode bin, Lambda
 spike-ins, negative controls), drop them with `--exclude-samples`:
 
 ```bash
-./bin/agar-bactopia submit local --input-type ont \
+./bin/bactopia-workbench submit local --input-type ont \
   --exclude-samples 'unclassified|lambda|neg' \
   /path/to/ont_fastqs /path/to/metadata /path/to/results_ont 25
 ```
@@ -387,7 +387,7 @@ cat ONT01_part1.fastq.gz ONT01_part2.fastq.gz > ONT01.fastq.gz
 ```
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --input-type ont \
   --ont-minlength 1000 \
   --ont-minqual 10 \
@@ -402,7 +402,7 @@ enabled by default. To enable one Medaka round, also provide the basecaller
 model:
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --input-type ont \
   --medaka-rounds 1 \
   --medaka-model '<basecaller-model>' \
@@ -423,7 +423,7 @@ relax the gates:
 
 ```bash
 EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0" \
-GENOME_SIZE=5000000 ./bin/agar-bactopia submit local \
+GENOME_SIZE=5000000 ./bin/bactopia-workbench submit local \
   --input-type ont \
   /path/to/ont_fastqs \
   /path/to/metadata \
@@ -456,7 +456,7 @@ marginal-coverage data, usually multiplexed ONT.
 
   ```bash
   EXTRA_ARGS_STRING="--coverage 0 --min_coverage 0 --min_basepairs 0 --min_reads 0" \
-  GENOME_SIZE=5000000 ./bin/agar-bactopia submit local \
+  GENOME_SIZE=5000000 ./bin/bactopia-workbench submit local \
     --input-type ont /path/to/ont_fastqs /path/to/metadata /path/to/results 50
   ```
 
@@ -485,7 +485,7 @@ FASTA extension becomes the sample name; the wrapper creates
 `samplesheet.assembly.fofn` automatically.
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --input-type assembly \
   /path/to/assemblies \
   /path/to/metadata \
@@ -513,7 +513,7 @@ A complete local example (controls excluded, optional typers on):
 ```bash
 EXCLUDE_SAMPLE_REGEX='unclassified|lambda|neg' \
 RUN_FIMTYPER=1 RUN_ST131_TYPER=1 \
-./bin/agar-bactopia submit local \
+./bin/bactopia-workbench submit local \
   --input-type assembly \
   --site-config config/sites/local.local.env \
   /path/to/assemblies \
@@ -529,7 +529,7 @@ accessions and NCBI assembly accessions can be mixed). Each accession must also
 appear in the metadata `Sample name` column.
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --input-type accession \
   /path/to/accessions.txt \
   /path/to/metadata \
@@ -552,7 +552,7 @@ Use `--dry-run` to check the current config, metadata, FOFN handling, and key
 dependencies without submitting any scheduler jobs.
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --dry-run \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -596,7 +596,7 @@ nothing outside their target organism. Customize either set per run without edit
 defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder checkm"`.
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --additional-tools yes \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -607,7 +607,7 @@ defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder 
 ### Force Non-AGAR Mode
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --is-agar-project 0 \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -618,7 +618,7 @@ defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder 
 ### Use A Different Site Config
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --site-config /path/to/gadi.local.env \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -629,7 +629,7 @@ defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder 
 ### Override PBS Mail Settings
 
 ```bash
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   --mail-user your.name@example.org \
   --mail-options ae \
   /path/to/raw_fastqs \
@@ -642,7 +642,7 @@ defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder 
 
 ```bash
 RUN_TOOLS_PARALLEL=1 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -657,7 +657,7 @@ Run only one named batch:
 
 ```bash
 BATCH_IDS=005 BATCH_LIMIT=1 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -668,7 +668,7 @@ Start later in the batch list:
 
 ```bash
 BATCH_START=3 BATCH_LIMIT=2 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -685,7 +685,7 @@ POSTPROCESS_ONLY=1 \
 RUN_CONSOLIDATE=1 \
 RUN_MLST_REVIEW=1 \
 RUN_EXPORT_RESULTS_WORKBOOK=1 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -711,7 +711,7 @@ internet-connected host you just enable it:
 
 ```bash
 RUN_FIMTYPER=1 \
-./bin/agar-bactopia submit local \
+./bin/bactopia-workbench submit local \
   --site-config config/sites/local.local.env \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -749,7 +749,7 @@ other sites: [docs/setup-non-gadi.md](docs/setup-non-gadi.md)).
 ```bash
 ST131_TYPER_DIR=/path/to/ST131Typer \
 RUN_ST131_TYPER=1 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -768,7 +768,7 @@ If you want the workbook first and the ST131 sheet appended later:
 ST131_TYPER_DIR=/path/to/ST131Typer \
 RUN_ST131_TYPER=1 \
 ST131_APPEND_AFTER_WORKBOOK=1 \
-./bin/agar-bactopia submit gadi \
+./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
   /path/to/results \
@@ -813,7 +813,7 @@ metadata file `B07_samplesheet.txt` (prefix `B07`):
 
 ```text
 RESULTS_ROOT/
-├── submit_agar_full_pipeline_YYYYMMDD_HHMMSS.log
+├── submit_workbench_pipeline_YYYYMMDD_HHMMSS.log
 ├── batch_bactopia_001/
 ├── batch_bactopia_001_tools/
 ├── batch_bactopia_001_kleborate/
@@ -841,7 +841,7 @@ RESULTS_ROOT/
 
 Notes:
 
-- the first file to check is usually `submit_agar_full_pipeline_*.log`
+- the first file to check is usually `submit_workbench_pipeline_*.log`
 - the final reviewed TSV is usually `B07_samplesheet_with_results_mlst_reviewed.tsv` when MLST review is enabled
 - if that reviewed TSV is not present, use `B07_samplesheet_with_results.tsv`
 - `B07_results.xlsx` is the default workbook name because it uses `basename(RESULTS_ROOT)`
@@ -914,7 +914,7 @@ first. See [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md#inode-warnings-on-g
 
 ## Repository Layout
 
-- `bin/agar-bactopia`: public command-line entrypoint
+- `bin/bactopia-workbench`: public command-line entrypoint
 - `wrappers/submit.gadi.sh`: PBS Pro submission wrapper for Gadi
 - `wrappers/submit.slurm.sh`: generic Slurm submission wrapper
 - `wrappers/submit.local.sh`: scheduler-free wrapper (runs stages on one host, no qsub/sbatch)

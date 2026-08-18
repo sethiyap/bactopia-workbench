@@ -1,6 +1,6 @@
 # Bactopia Setup: Install, Custom Datasets, And Kleborate
 
-This page is for setting up a **new** system to run `agar-bactopia-pipeline`. It
+This page is for setting up a **new** system to run `bactopia-workbench`. It
 covers three things users most often ask about:
 
 1. how to install Bactopia and what its prerequisites are
@@ -84,7 +84,7 @@ The custom datasets are **not bundled** in this repo (they are ~500 MB). Instead
 they are provided as a **download link** you fetch only when you want them:
 
 - **Direct download / releases page:**
-  <https://github.com/sethiyap/agar-bactopia-pipeline/releases>
+  <https://github.com/sethiyap/bactopia-workbench/releases>
 - or use the packaged helper below (recommended — it puts the files in the right
   place automatically).
 
@@ -146,7 +146,7 @@ about it in one of two ways:
 
   ```bash
   DATASETS_CACHE=/path/to/bactopia_datasets_custom \
-    ./bin/agar-bactopia submit gadi INPUT_SOURCE METADATA_DIR RESULTS_ROOT 50
+    ./bin/bactopia-workbench submit gadi INPUT_SOURCE METADATA_DIR RESULTS_ROOT 50
   ```
 
 The shared Gadi default is
@@ -154,7 +154,7 @@ The shared Gadi default is
 
 Run `--dry-run` after changing the path — the launcher verifies `DATASETS_CACHE`
 exists before submitting
-([submit_agar_full_pipeline.sh:604](../scripts/submit_agar_full_pipeline.sh#L604)).
+([submit_workbench_pipeline.sh:604](../scripts/submit_workbench_pipeline.sh#L604)).
 
 ### Where the datasets come from (other than the AGAR bundle)
 
@@ -267,7 +267,7 @@ To publish (or refresh) the AGAR custom datasets so others can download them:
 
    ```bash
    gh release create datasets-latest agar_bactopia_datasets.tar.gz \
-     --repo sethiyap/agar-bactopia-pipeline \
+     --repo sethiyap/bactopia-workbench \
      --title "AGAR custom Bactopia datasets" \
      --notes "Custom MLST schemes, reference genomes, Kleborate/AMR resources"
    ```

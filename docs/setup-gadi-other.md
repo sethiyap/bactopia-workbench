@@ -31,8 +31,8 @@ than repeating it here: [docs/bactopia-setup.md](bactopia-setup.md). In short:
 
 ```bash
 cd /g/data/<your_project>
-git clone https://github.com/sethiyap/agar-bactopia-pipeline.git agar-bactopia-pipeline
-cd agar-bactopia-pipeline
+git clone https://github.com/sethiyap/bactopia-workbench.git bactopia-workbench
+cd bactopia-workbench
 
 cp config/sites/gadi.env.example config/sites/gadi.local.env
 ```
@@ -44,7 +44,7 @@ config key.
 | Key | rg42 example value | Change to |
 | --- | --- | --- |
 | `PROJECT` | `rg42` | your NCI project code |
-| `PIPELINE_ROOT` | `/g/data/${PROJECT}/agar-bactopia-pipeline` | your clone path |
+| `PIPELINE_ROOT` | `/g/data/${PROJECT}/bactopia-workbench` | your clone path |
 | `BACTOPIA_PIPELINE` | `/g/data/${PROJECT}/bactopia/bactopia` | your Bactopia v3.2.0 checkout |
 | `DATASETS_CACHE` | `/g/data/${PROJECT}/bactopia_datasets/bactopia_datasets_custom` | your datasets cache |
 | `KRAKEN2_DB` | `/g/data/${PROJECT}/bactopia/kraken_indices/k2_pluspf_16_GB_...` | your Kraken2/Bracken DB |
@@ -93,7 +93,7 @@ cannot pull it at run time on a compute node. Do one of these on a **login node*
 ```bash
 # Pre-pull the published image into your project cache:
 SING_CACHE=/g/data/<your_project>/bactopia/caches/singularity \
-  /g/data/<your_project>/agar-bactopia-pipeline/scripts/pull_local_containers.sh --with-fimtyper
+  /g/data/<your_project>/bactopia-workbench/scripts/pull_local_containers.sh --with-fimtyper
 
 # ...or copy the rg42 image if you have read access:
 cp /g/data/rg42/bactopia/caches/singularity/fimtyper.sif \
@@ -109,7 +109,7 @@ the staged `.sif`, then enable with `RUN_FIMTYPER=1`. Details and build-your-own
 Validate config, inputs, and dependencies without submitting jobs:
 
 ```bash
-./bin/agar-bactopia submit gadi --dry-run \
+./bin/bactopia-workbench submit gadi --dry-run \
   --site-config config/sites/gadi.local.env \
   INPUT_SOURCE METADATA_DIR RESULTS_ROOT 50
 ```

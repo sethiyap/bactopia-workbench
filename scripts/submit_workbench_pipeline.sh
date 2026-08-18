@@ -5,13 +5,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/submit_agar_full_pipeline.sh [OPTIONS] INPUT_SOURCE METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
-  ./scripts/submit_agar_full_pipeline.sh --input-type ont /path/to/ont /path/to/metadata /path/to/results
-  ./scripts/submit_agar_full_pipeline.sh --input-type assembly /path/to/assemblies /path/to/metadata /path/to/results
-  ./scripts/submit_agar_full_pipeline.sh --input-type accession /path/to/accessions.txt /path/to/metadata /path/to/results
+  ./scripts/submit_workbench_pipeline.sh [OPTIONS] INPUT_SOURCE METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./scripts/submit_workbench_pipeline.sh --input-type ont /path/to/ont /path/to/metadata /path/to/results
+  ./scripts/submit_workbench_pipeline.sh --input-type assembly /path/to/assemblies /path/to/metadata /path/to/results
+  ./scripts/submit_workbench_pipeline.sh --input-type accession /path/to/accessions.txt /path/to/metadata /path/to/results
 
 Example:
-  ./scripts/submit_agar_full_pipeline.sh \
+  ./scripts/submit_workbench_pipeline.sh \
     /scratch/rg42/AGAR/rawdata/2025/B05 \
     /scratch/rg42/AGAR/metadata/2025/B05 \
     /scratch/rg42/AGAR/intermediates/2025/B05 \
@@ -112,7 +112,7 @@ Environment variables:
   ST131_TYPER_OUTPUT_DIR Default: <RESULTS_ROOT>/<basename(RESULTS_ROOT)>_st131typer
   RESULTS_WORKBOOK_OUTPUT Default: <RESULTS_ROOT>/<basename(RESULTS_ROOT)>_results.xlsx
   LOG_DIR                Default: dirname(LOG_FILE) or <RESULTS_ROOT>
-  LOG_FILE               Default: <RESULTS_ROOT>/submit_agar_full_pipeline_<timestamp>.log
+  LOG_FILE               Default: <RESULTS_ROOT>/submit_workbench_pipeline_<timestamp>.log
   PBS_LOG_DIR            Optional directory for scheduler stdout/stderr files
   PBS_MAIL_OPTIONS       Optional PBS-style mail flags, for example ae or abe
   PBS_MAIL_USER          Optional email address for scheduler notifications
@@ -304,9 +304,9 @@ log_dir=${LOG_DIR:-}
 if [[ -n ${LOG_FILE:-} ]]; then
   log_file=$LOG_FILE
 elif [[ -n $log_dir ]]; then
-  log_file=${log_dir%/}/submit_agar_full_pipeline_$(date '+%Y%m%d_%H%M%S').log
+  log_file=${log_dir%/}/submit_workbench_pipeline_$(date '+%Y%m%d_%H%M%S').log
 else
-  log_file=$results_root_arg/submit_agar_full_pipeline_$(date '+%Y%m%d_%H%M%S').log
+  log_file=$results_root_arg/submit_workbench_pipeline_$(date '+%Y%m%d_%H%M%S').log
 fi
 
 # Local (scheduler-free) backend: if the caller did not set PBS_LOG_DIR, capture
@@ -324,8 +324,8 @@ validate_script=${VALIDATE_FOFN_SCRIPT:-$script_dir/validate_bactopia_fofn.sh}
 validate_metadata_script=${VALIDATE_METADATA_SCRIPT:-$script_dir/validate_metadata_samples.py}
 consolidate_pbs_script=${CONSOLIDATE_PBS_SCRIPT:-$script_dir/run_consolidate_batches.pbs}
 consolidate_r_script=${CONSOLIDATE_SCRIPT:-$script_dir/consolidate_bactopia_batches.R}
-map_pbs_script=${MAP_PBS_SCRIPT:-$script_dir/run_map_agrf_samplesheet_results.pbs}
-map_r_script=${MAP_R_SCRIPT:-$script_dir/map_agrf_samplesheet_results.R}
+map_pbs_script=${MAP_PBS_SCRIPT:-$script_dir/run_map_samplesheet_results.pbs}
+map_r_script=${MAP_R_SCRIPT:-$script_dir/map_samplesheet_results.R}
 review_mlst_pbs_script=${REVIEW_MLST_PBS_SCRIPT:-$script_dir/run_review_mlst_from_tsv.pbs}
 fetch_assemblies_pbs_script=${FETCH_ASSEMBLIES_PBS_SCRIPT:-$script_dir/run_fetch_batch_assemblies.pbs}
 st131typer_pbs_script=${ST131_TYPER_PBS_SCRIPT:-$script_dir/run_st131typer_from_assemblies.pbs}
@@ -665,8 +665,8 @@ run_dry_run_validation() {
   dry_run_check_command "$metadata_validation_python_bin" "Metadata validation Python interpreter"
   dry_run_check_file "run_consolidate_batches.pbs/slurm wrapper" "$(scheduler_resolve_script "$consolidate_pbs_script")"
   dry_run_check_file "consolidate_bactopia_batches.R" "$consolidate_r_script"
-  dry_run_check_file "run_map_agrf_samplesheet_results.pbs/slurm wrapper" "$(scheduler_resolve_script "$map_pbs_script")"
-  dry_run_check_file "map_agrf_samplesheet_results.R" "$map_r_script"
+  dry_run_check_file "run_map_samplesheet_results.pbs/slurm wrapper" "$(scheduler_resolve_script "$map_pbs_script")"
+  dry_run_check_file "map_samplesheet_results.R" "$map_r_script"
 
   if [[ $postprocess_only != 1 ]]; then
     dry_run_check_path "BACTOPIA_PIPELINE" "$BACTOPIA_PIPELINE"

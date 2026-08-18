@@ -220,7 +220,7 @@ fi
 export RUN_AGAR_DIR=$project_root
 batch_size=${4:-${BATCH_SIZE_DEFAULT:-50}}
 
-cmd=("$project_root/scripts/submit_agar_full_pipeline.sh" --config "$site_config")
+cmd=("$project_root/scripts/submit_workbench_pipeline.sh" --config "$site_config")
 if [[ $dry_run == 1 ]]; then
   cmd+=(--dry-run)
 fi

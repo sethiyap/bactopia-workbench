@@ -120,7 +120,7 @@ command -v seqkit
 ## 6. Validate, Then Run
 
 ```bash
-./bin/agar-bactopia submit slurm \
+./bin/bactopia-workbench submit slurm \
   --site-config config/sites/slurm.local.env \
   --dry-run \
   /path/to/raw_fastqs \
@@ -175,7 +175,7 @@ Edit `config/sites/local.local.env` and set `BACTOPIA_PIPELINE`, `DATASETS_CACHE
 
 ```bash
 # from your activated conda env (e.g. `conda activate bactopia-3.2.0`)
-./bin/agar-bactopia submit local \
+./bin/bactopia-workbench submit local \
   --site-config config/sites/local.local.env \
   --dry-run \
   /path/to/raw_fastqs \
@@ -198,7 +198,7 @@ Firefly has `nextflow`, `singularity`, and `R` on PATH but no modulefiles, and a
 conda activate bactopia-3.2.0
 cp config/sites/local.env.example config/sites/local.local.env
 # edit BACTOPIA_PIPELINE / DATASETS_CACHE / KRAKEN2_DB / MINIFORGE_ROOT / MLST_ENV / SING_CACHE
-./bin/agar-bactopia submit local --site-config config/sites/local.local.env --dry-run \
+./bin/bactopia-workbench submit local --site-config config/sites/local.local.env --dry-run \
   ~/bactopia-trial-runs/raw ~/bactopia-trial-runs/metadata ~/bactopia-trial-runs/results 2
 ```
 
@@ -215,7 +215,7 @@ run is killed. On a remote host, always start it inside a detachable session —
 ```bash
 tmux new -s bactopia                 # start a named session
 conda activate bactopia-3.2.0
-./bin/agar-bactopia submit local \
+./bin/bactopia-workbench submit local \
   --site-config config/sites/local.local.env \
   ~/bactopia-trial-runs/raw ~/bactopia-trial-runs/metadata ~/bactopia-trial-runs/results 2
 # detach and leave it running:  press Ctrl-b then d
@@ -228,7 +228,7 @@ conda activate bactopia-3.2.0
 ```bash
 screen -S bactopia                   # start a named session
 conda activate bactopia-3.2.0
-./bin/agar-bactopia submit local \
+./bin/bactopia-workbench submit local \
   --site-config config/sites/local.local.env \
   ~/bactopia-trial-runs/raw ~/bactopia-trial-runs/metadata ~/bactopia-trial-runs/results 2
 # detach:      press Ctrl-a then d
@@ -238,7 +238,7 @@ conda activate bactopia-3.2.0
 **nohup (no session manager available):**
 
 ```bash
-nohup ./bin/agar-bactopia submit local \
+nohup ./bin/bactopia-workbench submit local \
   --site-config config/sites/local.local.env \
   ~/bactopia-trial-runs/raw ~/bactopia-trial-runs/metadata ~/bactopia-trial-runs/results 2 \
   > ~/bactopia-run.log 2>&1 &

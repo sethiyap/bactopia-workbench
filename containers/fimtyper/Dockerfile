@@ -1,4 +1,4 @@
-# FimTyper container for agar-bactopia-pipeline.
+# FimTyper container for bactopia-workbench.
 #
 # Provides the legacy CGE Perl FimTyper at the exact paths the pipeline calls
 # (see bactopia_config/fimtyper.nf):
@@ -19,8 +19,8 @@ ARG FIMTYPER_DB_REF=master
 ARG DEBIAN_FRONTEND=noninteractive
 
 LABEL org.opencontainers.image.title="agar-bactopia-fimtyper" \
-      org.opencontainers.image.description="CGE Perl FimTyper + database for agar-bactopia-pipeline" \
-      org.opencontainers.image.source="https://github.com/sethiyap/agar-bactopia-pipeline" \
+      org.opencontainers.image.description="CGE Perl FimTyper + database for bactopia-workbench" \
+      org.opencontainers.image.source="https://github.com/sethiyap/bactopia-workbench" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

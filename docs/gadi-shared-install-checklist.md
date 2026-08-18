@@ -1,6 +1,6 @@
 # Gadi Shared Install Checklist
 
-Use this checklist when setting up a shared `agar-bactopia-pipeline` checkout on
+Use this checklist when setting up a shared `bactopia-workbench` checkout on
 Gadi for lab-wide use.
 
 ## Shared Project Layout
@@ -9,7 +9,7 @@ Recommended shared locations:
 
 ```text
 /g/data/rg42/
-  agar-bactopia-pipeline/
+  bactopia-workbench/
   bactopia/
   bactopia/kraken_indices/
   bactopia_datasets/bactopia_datasets_custom/
@@ -27,7 +27,7 @@ Optional shared external references:
 
 The shared checkout should contain the full repo:
 
-- `bin/agar-bactopia`
+- `bin/bactopia-workbench`
 - `wrappers/submit.gadi.sh`
 - `config/defaults.env`
 - `config/sites/gadi.env.example`
@@ -120,8 +120,8 @@ install.
 
 ```bash
 cd /g/data/rg42
-git clone https://github.com/sethiyap/agar-bactopia-pipeline.git agar-bactopia-pipeline
-cd /g/data/rg42/agar-bactopia-pipeline
+git clone https://github.com/sethiyap/bactopia-workbench.git bactopia-workbench
+cd /g/data/rg42/bactopia-workbench
 ```
 
 2. Review the shared live config:
@@ -155,15 +155,15 @@ module avail R
 5. Test the public CLI help:
 
 ```bash
-/g/data/rg42/agar-bactopia-pipeline/bin/agar-bactopia
-/g/data/rg42/agar-bactopia-pipeline/wrappers/submit.gadi.sh --help
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench
+/g/data/rg42/bactopia-workbench/wrappers/submit.gadi.sh --help
 ```
 
 6. Run one small test submission:
 
 ```bash
 cd /home/562/ps1744
-/g/data/rg42/agar-bactopia-pipeline/bin/agar-bactopia submit gadi \
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
   /scratch/rg42/AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5 \
   /scratch/rg42/AGAR/metadata/2025/B07 \
   /scratch/rg42/AGAR/intermediates/2025/B07 \
@@ -173,7 +173,7 @@ cd /home/562/ps1744
 7. If needed, enable the extra tool bundle:
 
 ```bash
-/g/data/rg42/agar-bactopia-pipeline/bin/agar-bactopia submit gadi --additional-tools yes \
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi --additional-tools yes \
   /scratch/rg42/AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5 \
   /scratch/rg42/AGAR/metadata/2025/B07 \
   /scratch/rg42/AGAR/intermediates/2025/B07 \
@@ -188,12 +188,12 @@ cd /home/562/ps1744
 - Large reference data and databases should stay outside the repo and be
   referenced from `gadi.local.env`.
 - Run the public submit command from your home directory, for example
-  `/home/562/ps1744`, rather than from `/g/data/rg42/agar-bactopia-pipeline`.
+  `/home/562/ps1744`, rather than from `/g/data/rg42/bactopia-workbench`.
   That keeps launcher logs and default PBS `.o`/`.e` files out of the shared
   install path.
 - For a one-off personal submission against a shared config, pass
   `--mail-user <email>` and optionally `--mail-options <events>` on the
-  `/g/data/rg42/agar-bactopia-pipeline/bin/agar-bactopia submit gadi ...`
+  `/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi ...`
   command instead.
 - If Gadi reports an inode overload or scratch quota hold, check `df -Pi`,
   `lquota`, and `nci_account -P <project>` and clean old scratch `work/`,

@@ -18,10 +18,10 @@
 #   # Optional password mode from a login shell:
 #   # export RDS_SFTP_USE_PASSWORD=1
 #   # ./scripts/submit_transfer_gadi_to_rds.sh
-#   export TRANSFER_SCRIPT=/g/data/rg42/agar-bactopia-pipeline/scripts/transfer_gadi_to_rds.sh
+#   export TRANSFER_SCRIPT=/g/data/rg42/bactopia-workbench/scripts/transfer_gadi_to_rds.sh
 #   export DEBUG_LOG_DIR=/scratch/rg42/${USER}/transfer_logs
 #   export RDS_UPLOAD_MANIFEST_DIR=/scratch/rg42/${USER}/.rds_transfer_manifests
-#   qsub -V /g/data/rg42/agar-bactopia-pipeline/scripts/jobsubmission_transfer_gadi_to_rds.pbs
+#   qsub -V /g/data/rg42/bactopia-workbench/scripts/jobsubmission_transfer_gadi_to_rds.pbs
 
 set -euo pipefail
 
@@ -64,11 +64,11 @@ if [[ -z $TRANSFER_SCRIPT ]]; then
     )
   fi
   transfer_candidates+=(
-    "/g/data/${project_name}/agar-bactopia-pipeline/scripts/transfer_gadi_to_rds.sh"
+    "/g/data/${project_name}/bactopia-workbench/scripts/transfer_gadi_to_rds.sh"
   )
   if [[ $project_name != "rg42" ]]; then
     transfer_candidates+=(
-      "/g/data/rg42/agar-bactopia-pipeline/scripts/transfer_gadi_to_rds.sh"
+      "/g/data/rg42/bactopia-workbench/scripts/transfer_gadi_to_rds.sh"
     )
   fi
 
@@ -90,7 +90,7 @@ if [[ -z $TRANSFER_SCRIPT ]]; then
     echo "Tried these helper paths:" >&2
     printf '  %s\n' "${transfer_candidates[@]}" >&2
     echo "Set TRANSFER_SCRIPT explicitly before qsub, for example:" >&2
-    echo "  export TRANSFER_SCRIPT=/g/data/rg42/agar-bactopia-pipeline/scripts/transfer_gadi_to_rds.sh" >&2
+    echo "  export TRANSFER_SCRIPT=/g/data/rg42/bactopia-workbench/scripts/transfer_gadi_to_rds.sh" >&2
     exit 1
   fi
 fi

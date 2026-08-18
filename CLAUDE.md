@@ -14,7 +14,7 @@ Key stages (see `scripts/`):
   typing tools per batch.
 - `consolidate_bactopia_batches.R` — merge per-batch tool outputs into a
   consolidated directory (`tools/results_<tool>/merged-results/...`).
-- `map_agrf_samplesheet_results.R` — join consolidated tool tables onto the
+- `map_samplesheet_results.R` — join consolidated tool tables onto the
   metadata samplesheet, producing `*_samplesheet_with_results.tsv` (and, after
   MLST review, `*_samplesheet_with_results_mlst_reviewed.tsv`).
 - `export_bactopia_results_workbook.py` — write the final `.xlsx` workbook
@@ -26,7 +26,7 @@ Key stages (see `scripts/`):
 **The final result Excel sheet must keep columns from the same tool together.**
 
 The main ("mapped") sheet of the workbook is built by
-`map_agrf_samplesheet_results.R`. Column grouping is enforced there, not in the
+`map_samplesheet_results.R`. Column grouping is enforced there, not in the
 Python exporter:
 
 - Every tool's columns are namespaced with a tool prefix (`mlst_`, `kleborate_`,
@@ -46,7 +46,7 @@ Python exporter:
   are the input-read coverage flag (input basepairs ÷ genome size, `< 10×`
   flagged), computed per batch in `run_bactopia_batch.*`, consolidated into
   `coverage_summary.tsv`, and joined onto the sheet in
-  `map_agrf_samplesheet_results.R`. They appear only when that table exists.
+  `map_samplesheet_results.R`. They appear only when that table exists.
   `mlst_review_note` is appended downstream by `run_review_mlst_from_tsv.sh` as
   the last column of the `*_mlst_reviewed.tsv` file.
 
