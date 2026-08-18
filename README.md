@@ -18,7 +18,7 @@ For **setting up** an environment, pick the matching setup guide below.
 - [Metadata Sheet](#metadata-sheet)
 - [Input Manifests (FOFN)](#input-manifests-fofn)
 - [Common Variations](#common-variations)
-- [Optional Tools: FimTyper And ST131Typer](#optional-tools-fimtyper-and-st131typer)
+- [Typing Tools: FimTyper And ST131Typer](#typing-tools-fimtyper-and-st131typer)
 - [Outputs](#outputs)
 - [Troubleshooting](#troubleshooting)
 - [Repository Layout](#repository-layout)
@@ -128,8 +128,8 @@ are pointed to from your site config:
 - **Nextflow**, a container engine (**Singularity**/**Apptainer**, or Docker), and **R**
 - **conda/mamba** with **`mlst`** + **`seqkit`** for MLST review, and **`python3`** +
   **`openpyxl`** for the workbook
-- **Optional: ST131Typer** (`ST131_TYPER_DIR`) — not bundled; only needed if you
-  enable `RUN_ST131_TYPER=1`. Also needs `mlst`/`seqkit` on `PATH`.
+- **ST131Typer** (`ST131_TYPER_DIR`) — not bundled but **on by default**; install it
+  (below) or the run auto-skips it with a warning. Also needs `mlst`/`seqkit` on `PATH`.
 
 One helper covers the last two on non-Gadi hosts — it installs Miniforge, an
 `mlst`+`seqkit` conda env, and clones ST131Typer (symlinking `ST131Typer.sh`):
@@ -214,9 +214,9 @@ unavailable). Every stage runs on the machine **in order, with no `qsub`/`sbatch
 and Bactopia's own processes run with Nextflow's local executor — nothing is ever
 submitted. Because it runs in the foreground, start it inside `tmux`/`screen` on a
 remote host so it survives disconnects. Simpler and slower; ideal for trial runs
-and small batches. Core Bactopia, Kleborate, MLST review, and workbook export run
-by default; **ST131Typer** works too, and **FimTyper** is off by default but can be
-enabled →
+and small batches. Core Bactopia, Kleborate, **FimTyper**, **ST131Typer**, MLST
+review, and workbook export all run by default (FimTyper/ST131Typer auto-skip with a
+warning if not installed) →
 [docs/setup-non-gadi.md → local backend](docs/setup-non-gadi.md#no-scheduler-use-the-local-backend)
 
 ## Running The Pipeline
@@ -508,11 +508,10 @@ Because there are no reads with assembly input:
   `plasmidfinder`, plus `kleborate`, `fimtyper`, ST131Typer, and (with
   `--additional-tools yes`) `mobsuite`, `phispy`, `ectyper`, `shiga*`, `defensefinder`.
 
-A complete local example (controls excluded, optional typers on):
+A complete local example (controls excluded; FimTyper + ST131Typer run by default):
 
 ```bash
 EXCLUDE_SAMPLE_REGEX='unclassified|lambda|neg' \
-RUN_FIMTYPER=1 RUN_ST131_TYPER=1 \
 ./bin/bactopia-workbench submit local \
   --input-type assembly \
   --site-config config/sites/local.local.env \
@@ -573,9 +572,12 @@ dependencies without submitting any scheduler jobs.
 | `bracken` | Species abundance (from Kraken2; needs `KRAKEN2_DB`) |
 | `checkm` | Assembly completeness / contamination QC |
 
-**Kleborate** runs by default too (`RUN_KLEBORATE=1`) but as its own stage —
-*Klebsiella*-focused typing. **FimTyper** is opt-in (`RUN_FIMTYPER=0`) — *E. coli*
-FimH typing (needs a container or native `FIMTYPER_DIR`/`FIMTYPER_ENV`).
+**Kleborate** (`RUN_KLEBORATE=1`, *Klebsiella* typing), **FimTyper**
+(`RUN_FIMTYPER=1`, *E. coli* FimH typing), and **ST131Typer** (`RUN_ST131_TYPER=1`,
+*E. coli* ST131 typing) also run by default, each as its own stage. FimTyper and
+ST131Typer need a one-time setup (a container / a clone); if it's missing, the run
+**skips them with a warning** rather than failing. Set `RUN_FIMTYPER=0` /
+`RUN_ST131_TYPER=0` to turn either off.
 
 **Additional tools** — opt-in bundle (`RUN_ADDITIONAL_TOOLS=0`,
 `ADDITIONAL_TOOLS_STRING`), enabled with `--additional-tools yes`:
@@ -696,45 +698,38 @@ In `POSTPROCESS_ONLY=1` mode, the trailing `50` does not limit the work to 50
 samples. Consolidation runs across all batch directories already present under
 `RESULTS_ROOT`.
 
-## Optional Tools: FimTyper And ST131Typer
+## Typing Tools: FimTyper And ST131Typer
 
-**FimTyper** and **ST131Typer** are both **off by default on every backend**
-(`gadi`, `slurm`, `local`) — they are opt-in per run because each needs setup the
-core tools don't. Everything else (Bactopia, Kleborate, extra tools, MLST review,
-mapping, workbook) runs automatically.
+**FimTyper** and **ST131Typer** now **run by default on every backend** (`gadi`,
+`slurm`, `local`) — no per-run flags needed. Each still needs a one-time setup the
+core tools don't (a container / a clone); when that setup is absent, the run
+**skips the tool with a warning** instead of failing. Turn either off with
+`RUN_FIMTYPER=0` / `RUN_ST131_TYPER=0`.
 
 ### FimTyper
 
-Off by default, but **no external install needed**: the FimTyper image is
-published to GHCR and **auto-pulled** by Nextflow (like mlst/kleborate), so on an
-internet-connected host you just enable it:
-
-```bash
-RUN_FIMTYPER=1 \
-./bin/bactopia-workbench submit local \
-  --site-config config/sites/local.local.env \
-  /path/to/raw_fastqs \
-  /path/to/metadata \
-  /path/to/results \
-  50
-```
+Runs by default with **no external install needed** on an internet-connected host:
+the FimTyper image is published to GHCR and **auto-pulled** by Nextflow (like
+mlst/kleborate). Nothing to add to the command.
 
 - **Slurm / local:** the `FIMTYPER_CONTAINER` default is the published GHCR image,
-  pulled into `SING_CACHE` on first use — `RUN_FIMTYPER=1` is all you need.
+  pulled into `SING_CACHE` on first use — it just works.
 - **Gadi:** compute nodes have no internet, so the image is **pre-staged**
   instead (the shared rg42 `.sif`, or pre-pull the GHCR image on a login node —
   see [docs/setup-gadi-other.md](docs/setup-gadi-other.md#6-optional-fimtyper)).
-- On the shared rg42 install, `RUN_FIMTYPER=1` alone works (already configured).
 - Offline hosts: pre-stage with `./scripts/pull_local_containers.sh --with-fimtyper`
-  and/or override `FIMTYPER_CONTAINER=/path/to/fimtyper.sif`.
+  and set `FIMTYPER_CONTAINER=/path/to/fimtyper.sif`. If a local `.sif` path is set
+  but missing, FimTyper is **skipped with a warning**.
+- Turn it off with `RUN_FIMTYPER=0`.
 
 The published image is maintained from [containers/fimtyper/Dockerfile](containers/fimtyper/Dockerfile)
 via [.github/workflows/build-fimtyper.yml](.github/workflows/build-fimtyper.yml).
 
 ### ST131Typer
 
-**Setup once** — the tool is not bundled. Either let the repo install it
-(also sets up the `mlst`/`seqkit` env it depends on):
+Runs by default, but the tool is **not bundled** (and is *E. coli* ST131-specific),
+so set it up once. Either let the repo install it (also sets up the `mlst`/`seqkit`
+env it depends on):
 
 ```bash
 ./scripts/install_optional_local_tools.sh
@@ -742,13 +737,13 @@ via [.github/workflows/build-fimtyper.yml](.github/workflows/build-fimtyper.yml)
 
 or point at an existing clone with `ST131_TYPER_DIR` (rg42 users: the shared clone
 is `/g/data/rg42/ST131Typer` — see [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md);
-other sites: [docs/setup-non-gadi.md](docs/setup-non-gadi.md)).
+other sites: [docs/setup-non-gadi.md](docs/setup-non-gadi.md)). If no clone is found,
+ST131Typer is **skipped with a warning** and the run still completes.
 
-**Enable per run** by adding it to the main submission:
+Once installed it runs as part of a normal submission — nothing to add to the command:
 
 ```bash
 ST131_TYPER_DIR=/path/to/ST131Typer \
-RUN_ST131_TYPER=1 \
 ./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
   /path/to/metadata \
@@ -756,9 +751,10 @@ RUN_ST131_TYPER=1 \
   50
 ```
 
-Important points:
+Set `ST131_TYPER_DIR` once in your site config and you can drop it from the command
+entirely. Important points:
 
-- `RUN_ST131_TYPER=1` is required
+- runs by default; set `RUN_ST131_TYPER=0` to skip it
 - the core batch workflow finishes before ST131Typer is submitted
 - `RUN_COLLECT_ASSEMBLIES=1` must stay enabled unless you point `ST131_TYPER_INPUT_DIR` at an existing assemblies folder
 
@@ -766,7 +762,6 @@ If you want the workbook first and the ST131 sheet appended later:
 
 ```bash
 ST131_TYPER_DIR=/path/to/ST131Typer \
-RUN_ST131_TYPER=1 \
 ST131_APPEND_AFTER_WORKBOOK=1 \
 ./bin/bactopia-workbench submit gadi \
   /path/to/raw_fastqs \
