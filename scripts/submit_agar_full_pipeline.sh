@@ -1533,4 +1533,19 @@ if [[ $st131_append_after_workbook == 1 ]]; then
   log "INFO" "ST131 workbook append job ${st131_append_workbook_job_id}: ${results_workbook_output}"
 fi
 
+# Local backend: the gzipped assembly copies staged by create_bactopia_input are
+# only consumed by the (already-finished) Bactopia stage. Remove them, plus the
+# generated manifest that references them, so nothing is left behind after a
+# successful run; a re-run simply re-stages from your original assemblies. Reaching
+# this point means every stage ran (set -e + the ERR trap abort on any failure), and
+# only fires when staging actually happened (the staged dir exists).
+if [[ $scheduler_backend == "local" && $input_type == "assembly" && $postprocess_only != 1 ]]; then
+  staged_assemblies_dir="$(dirname "$samplesheet_path")/staged_assemblies"
+  if [[ -d $staged_assemblies_dir ]]; then
+    rm -rf "$staged_assemblies_dir"
+    rm -f "$samplesheet_path"
+    log "INFO" "Removed temporary staged assemblies and manifest: $staged_assemblies_dir"
+  fi
+fi
+
 log "INFO" "Pipeline submission completed successfully."

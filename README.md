@@ -477,7 +477,10 @@ The assembly directory may contain `.fasta`, `.fna`, `.fa` files **or** their
 gzipped forms (`.fasta.gz`, `.fna.gz`, `.fa.gz`). Uncompressed assemblies are
 gzipped into a `staged_assemblies/` folder next to the manifest (your files are
 left as-is), since Bactopia expects gzipped input — so the pipeline's own
-uncompressed `*_assemblies/` output works directly here. The filename without the
+uncompressed `*_assemblies/` output works directly here. On the **local** backend
+that `staged_assemblies/` folder and the generated manifest are **removed after a
+successful run** (a re-run re-stages from your originals); compressed inputs are
+used in place and nothing is staged. The filename without the
 FASTA extension becomes the sample name; the wrapper creates
 `samplesheet.assembly.fofn` automatically.
 
