@@ -37,7 +37,8 @@ Environment variables:
   MASH_SKETCH             Required if TOOLS_STRING includes mashdist (reference .msh)
   DEFENSEFINDER_DB        Optional database path for defensefinder
   RUN_KLEBORATE           Default: 1
-  RUN_FIMTYPER            Default: 0
+  RUN_FIMTYPER            Default: 1 (skipped with a warning if a local
+                          FIMTYPER_CONTAINER .sif path is set but missing)
   FIMTYPER_PIPELINE       Required when RUN_FIMTYPER=1
   FIMTYPER_CONFIG         Required when RUN_FIMTYPER=1
   MERGE_FIMTYPER_SCRIPT   Optional merge helper run after FimTyper
@@ -123,7 +124,22 @@ MYKROBE_SPECIES=${MYKROBE_SPECIES:-}
 DEFENSEFINDER_DB=${DEFENSEFINDER_DB:-}
 MASH_SKETCH=${MASH_SKETCH:-}
 RUN_KLEBORATE=${RUN_KLEBORATE:-1}
-RUN_FIMTYPER=${RUN_FIMTYPER:-0}
+RUN_FIMTYPER=${RUN_FIMTYPER:-1}
+# FimTyper defaults on. In container mode (no FIMTYPER_DIR), if an explicit LOCAL
+# .sif path is given via FIMTYPER_CONTAINER but is missing, skip FimTyper with a
+# warning instead of failing deep in Nextflow. An unset FIMTYPER_CONTAINER or a
+# registry URI (docker://, oras://) is left alone so Nextflow can pull it.
+if [[ $RUN_FIMTYPER != 0 && -z ${FIMTYPER_DIR:-} ]]; then
+  case "${FIMTYPER_CONTAINER:-}" in
+    ''|*://*) : ;;
+    *)
+      if [[ ! -e ${FIMTYPER_CONTAINER} ]]; then
+        echo "[batch] WARNING: FimTyper container not found (${FIMTYPER_CONTAINER}); skipping FimTyper. Pull it with scripts/pull_local_containers.sh --with-fimtyper, or set RUN_FIMTYPER=0." >&2
+        RUN_FIMTYPER=0
+      fi
+      ;;
+  esac
+fi
 FIMTYPER_PIPELINE=${FIMTYPER_PIPELINE:-}
 FIMTYPER_CONFIG=${FIMTYPER_CONFIG:-}
 MERGE_FIMTYPER_SCRIPT=${MERGE_FIMTYPER_SCRIPT:-}

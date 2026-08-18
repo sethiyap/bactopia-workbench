@@ -86,9 +86,10 @@ Environment variables:
                          now waits until the core workflow, consolidation,
                          mapping, and MLST review chain finish before collecting
                          flattened assemblies
-  RUN_ST131_TYPER        Default: 0. Set to 1 to run ST131Typer after the
-                         post-processing chain finishes and the assemblies
-                         folder is ready
+  RUN_ST131_TYPER        Default: 1. Runs ST131Typer after the post-processing
+                         chain finishes and the assemblies folder is ready.
+                         E. coli ST131-specific; auto-skipped with a warning if
+                         the ST131Typer clone is not installed. Set to 0 to skip.
   ST131_APPEND_AFTER_WORKBOOK Default: 0. Set to 1 to export the main workbook
                          first, then run ST131Typer, then append the
                          `st131typer_summary` sheet into that existing workbook
@@ -292,7 +293,7 @@ map_agrf_results=${MAP_AGRF_RESULTS:-1}
 run_mlst_review=${RUN_MLST_REVIEW:-1}
 run_post_review_map=${RUN_POST_REVIEW_MAP:-0}
 run_collect_assemblies=${RUN_COLLECT_ASSEMBLIES:-1}
-run_st131typer=${RUN_ST131_TYPER:-0}
+run_st131typer=${RUN_ST131_TYPER:-1}
 st131_append_after_workbook=${ST131_APPEND_AFTER_WORKBOOK:-0}
 use_existing_st131typer=${USE_EXISTING_ST131_TYPER:-0}
 run_export_results_workbook=${RUN_EXPORT_RESULTS_WORKBOOK:-1}
@@ -604,7 +605,7 @@ dry_run_check_python_module() {
 run_dry_run_validation() {
   local run_tools=${RUN_TOOLS:-1}
   local run_kleborate=${RUN_KLEBORATE:-1}
-  local run_fimtyper=${RUN_FIMTYPER:-0}
+  local run_fimtyper=${RUN_FIMTYPER:-1}
   local default_tools_string=${DEFAULT_TOOLS_STRING:-abritamr amrfinderplus bracken checkm mlst plasmidfinder}
   local additional_tools_string=${ADDITIONAL_TOOLS_STRING:-defensefinder ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}
   local tools_string=${TOOLS_STRING:-}
@@ -743,7 +744,12 @@ run_dry_run_validation() {
 
   if [[ $run_st131typer == 1 ]]; then
     dry_run_check_file "run_st131typer_from_assemblies.pbs/slurm wrapper" "$(scheduler_resolve_script "$st131typer_pbs_script")"
-    dry_run_check_file "ST131Typer.sh" "$st131typer_script"
+    # ST131Typer defaults on; a missing external clone is a skip, not a failure.
+    if [[ -f $st131typer_script ]]; then
+      dry_run_pass "ST131Typer.sh found: $st131typer_script"
+    else
+      dry_run_warn "ST131Typer.sh not found ($st131typer_script); ST131Typer will be skipped. Install it with scripts/install_optional_local_tools.sh, set ST131_TYPER_DIR, or set RUN_ST131_TYPER=0."
+    fi
   fi
 
   if [[ $postprocess_only != 1 && $input_type == "illumina" && $skip_normalize != 1 && $is_agar_project == 1 ]]; then
@@ -1157,9 +1163,13 @@ if [[ $run_st131typer == 1 ]]; then
     fail "Required ST131Typer PBS wrapper not found: $st131typer_pbs_script"
   fi
   if [[ ! -f $st131typer_script ]]; then
-    fail "Required ST131Typer script not found: $st131typer_script. Define ST131_TYPER_DIR=/path/to/ST131Typer or ST131_TYPER_SCRIPT=/path/to/ST131Typer.sh"
+    # ST131Typer defaults on but needs an external clone. Skip gracefully (rather
+    # than abort the whole run) when it is not installed on this host.
+    log "WARN" "ST131Typer not found ($st131typer_script); skipping ST131Typer. Install it with scripts/install_optional_local_tools.sh, set ST131_TYPER_DIR=/path/to/ST131Typer, or set RUN_ST131_TYPER=0 to silence this."
+    run_st131typer=0
+  else
+    log "INFO" "Found ST131Typer.sh at: $st131typer_script"
   fi
-  log "INFO" "Found ST131Typer.sh at: $st131typer_script"
 elif [[ $run_collect_assemblies == 1 ]]; then
   if [[ ! -f $fetch_assemblies_pbs_script ]]; then
     fail "Required assemblies collection script not found: $fetch_assemblies_pbs_script"
