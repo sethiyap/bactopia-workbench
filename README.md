@@ -2,14 +2,15 @@
 
 `bactopia-workbench` is a Bactopia packaging for HPC that works with AGAR and
 non-AGAR bacterial-genomics projects alike. It wraps submission, batching, result
-consolidation, metadata mapping, MLST review, workbook export, and optional
-ST131Typer follow-up into one workflow.
+consolidation, metadata mapping, MLST review, workbook export, and FimTyper/
+ST131Typer typing into one workflow.
 
 This page covers **how to use** the pipeline (the command, inputs, and outputs).
 For **setting up** an environment, pick the matching setup guide below.
 
 ## Table Of Contents
 
+- [Quick Start](#quick-start)
 - [Motivation](#motivation)
 - [Pipeline Overview](#pipeline-overview)
 - [Installation](#installation)
@@ -23,6 +24,48 @@ For **setting up** an environment, pick the matching setup guide below.
 - [Troubleshooting](#troubleshooting)
 - [Repository Layout](#repository-layout)
 - [Documentation](#documentation)
+
+## Quick Start
+
+If the pipeline is already set up for your site (an admin has created the shared
+site config and installed the tools/caches), a run is a **single line** — every
+typing tool (MLST, Kleborate, FimTyper, ST131Typer, …) runs by default, and
+everything host-specific lives in the site config.
+
+**Local host / firefly** (`submit local`, site config defaults to
+`config/sites/local.local.env`):
+
+```bash
+# ONT reads
+./bin/bactopia-workbench submit local --input-type ont \
+  /path/to/ont_fastqs /path/to/metadata /path/to/results
+
+# Illumina reads (illumina is the default input type)
+./bin/bactopia-workbench submit local \
+  /path/to/raw_fastqs /path/to/metadata /path/to/results
+```
+
+**NCI Gadi** (`submit gadi`, site config defaults to `config/sites/gadi.local.env`):
+
+```bash
+# Illumina reads
+./bin/bactopia-workbench submit gadi \
+  /path/to/raw_fastqs /path/to/metadata /path/to/results
+
+# ONT reads
+./bin/bactopia-workbench submit gadi --input-type ont \
+  /path/to/ont_fastqs /path/to/metadata /path/to/results
+```
+
+That's the whole command: a backend, `--input-type` only for non-Illumina inputs,
+and three paths (input dir, metadata dir, results dir). An optional trailing
+number sets the batch size (else the config default). Add `--dry-run` first to
+validate config, inputs, and dependencies without submitting jobs.
+
+Anything you want to change per run stays available as an optional flag —
+`--exclude-samples`, `--genome-size`, `--additional-tools yes`, `RUN_ST131_TYPER=0`,
+etc. — see [Running The Pipeline](#running-the-pipeline). Setting up a new host
+instead? Start with [Installation](#installation).
 
 ## Motivation
 
@@ -38,8 +81,8 @@ For a normal run, the pipeline:
 8. exports a final workbook
 
 Compared with plain Bactopia, this repo also includes AGAR-facing workflow
-behaviour such as metadata mapping, MLST review logic, optional FimTyper
-integration, and optional ST131Typer append workflows.
+behaviour such as metadata mapping, MLST review logic, and FimTyper/ST131Typer
+typing (both on by default).
 
 An existing Bactopia installation (**v3.2.0**) is a prerequisite; Bactopia is
 not bundled by this repository, and Bactopia v4 should not be substituted
