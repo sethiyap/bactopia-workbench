@@ -25,12 +25,18 @@ LABEL org.opencontainers.image.title="agar-bactopia-fimtyper" \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         perl \
+        libbio-perl-perl \
         ncbi-blast+ \
         git \
         ca-certificates \
         procps \
         gzip \
     && rm -rf /var/lib/apt/lists/*
+
+# fimtyper.pl does `use Bio::SeqIO` (BioPerl, from libbio-perl-perl above). Fail the
+# build early if that module can't load, rather than shipping an image that dies at
+# runtime with "Can't locate Bio/SeqIO.pm".
+RUN perl -MBio::SeqIO -e 'print "Bio::SeqIO OK\n"'
 
 # FimTyper tool + database at the paths fimtyper.nf hardcodes.
 RUN git clone --depth 1 --branch "${FIMTYPER_REF}" \
