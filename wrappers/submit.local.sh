@@ -58,6 +58,7 @@ use_porechop_override=
 genome_size_override=
 exclude_samples_override=
 
+positionals=()
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
     --site-config)
@@ -126,10 +127,15 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
     *)
-      break
+      positionals+=("$1")
+      shift
       ;;
   esac
 done
+
+# Options may appear before or after the positional paths: any non-option token
+# is collected above, so `--dry-run` (etc.) works at the end of the command too.
+set -- ${positionals[@]+"${positionals[@]}"}
 
 if [[ $# -lt 3 || $# -gt 4 ]]; then
   usage >&2
