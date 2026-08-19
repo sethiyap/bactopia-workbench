@@ -8,7 +8,7 @@ if (!params.results_main) {
 }
 
 assemblies_ch = Channel
-    .fromPath("${params.results_main}/*/main/assembler/*.fna.gz", checkIfExists: true)
+    .fromPath("${params.results_main}/*/main/assembler/*.fna.gz", checkIfExists: false)
     .map { assembly ->
         def sample = assembly.baseName.replaceFirst(/\.fna$/, '')
         tuple(sample, assembly)

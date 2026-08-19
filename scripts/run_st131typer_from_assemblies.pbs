@@ -35,6 +35,17 @@ if [[ -z "$ASSEMBLIES_DIR" || ! -d "$ASSEMBLIES_DIR" ]]; then
   exit 1
 fi
 
+# If no assemblies were collected (e.g. all samples were dropped at QC), ST131Typer
+# has nothing to type. Skip gracefully instead of failing later on an empty summary.
+shopt -s nullglob
+_st131_assemblies=("$ASSEMBLIES_DIR"/*.fna "$ASSEMBLIES_DIR"/*.fna.gz "$ASSEMBLIES_DIR"/*.fasta "$ASSEMBLIES_DIR"/*.fa)
+shopt -u nullglob
+if [[ ${#_st131_assemblies[@]} -eq 0 ]]; then
+  echo "[st131typer] No assemblies in $ASSEMBLIES_DIR; skipping ST131Typer for this batch." >&2
+  mkdir -p "$ST131_TYPER_OUTPUT_DIR"
+  exit 0
+fi
+
 if [[ -z "$ST131_TYPER_SCRIPT" || ! -f "$ST131_TYPER_SCRIPT" ]]; then
   echo "ST131_TYPER_SCRIPT not found: $ST131_TYPER_SCRIPT" >&2
   exit 1

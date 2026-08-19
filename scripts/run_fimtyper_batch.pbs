@@ -50,6 +50,18 @@ if [[ ! -d "$RESULTS_MAIN" ]]; then
   exit 1
 fi
 
+# If the batch produced no assemblies (e.g. all samples were dropped at QC), there
+# is nothing for FimTyper to type. Skip gracefully with a clear message instead of
+# letting Nextflow abort on an empty input glob (checkIfExists).
+shopt -s nullglob
+_fimtyper_assemblies=("$RESULTS_MAIN"/*/main/assembler/*.fna.gz)
+shopt -u nullglob
+if [[ ${#_fimtyper_assemblies[@]} -eq 0 ]]; then
+  echo "[fimtyper] No assemblies under $RESULTS_MAIN (*/main/assembler/*.fna.gz); skipping FimTyper for this batch." >&2
+  mkdir -p "$RESULTS_OUT/results_fimtyper"
+  exit 0
+fi
+
 mkdir -p "$SCRATCH_RUN" "$RESULTS_OUT" "$SING_CACHE"
 
 if [[ "${USE_MODULES:-1}" == "1" ]]; then
