@@ -35,15 +35,27 @@ everything host-specific lives in the site config.
 **Local host / firefly** (`submit local`, site config defaults to
 `config/sites/local.local.env`):
 
+On the shared **firefly** install, the launcher is at this absolute path — call it
+from any directory, no `cd` needed:
+
+```
+/data/projects/pipelines/bactopia-pipeline/bactopia-workbench/bin/bactopia-workbench
+```
+
 ```bash
 # ONT reads
-./bin/bactopia-workbench submit local --input-type ont \
+/data/projects/pipelines/bactopia-pipeline/bactopia-workbench/bin/bactopia-workbench \
+  submit local --input-type ont \
   /path/to/ont_fastqs /path/to/metadata /path/to/results
 
 # Illumina reads (illumina is the default input type)
-./bin/bactopia-workbench submit local \
+/data/projects/pipelines/bactopia-pipeline/bactopia-workbench/bin/bactopia-workbench \
+  submit local \
   /path/to/raw_fastqs /path/to/metadata /path/to/results
 ```
+
+> From inside the clone you can use the shorthand `./bin/bactopia-workbench …`
+> instead of the full path.
 
 **NCI Gadi** (`submit gadi`, site config defaults to `config/sites/gadi.local.env`):
 
