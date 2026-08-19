@@ -25,7 +25,7 @@ Environment overrides:
   SING_CACHE                destination dir (same as --dest)
   MLST_CONTAINER_URI        default: docker://quay.io/biocontainers/mlst:2.33.1--hdfd78af_0
   KLEBORATE_CONTAINER_URI   default: docker://quay.io/biocontainers/kleborate:2.3.2--pyhdfd78af_0
-  FIMTYPER_CONTAINER_URI    default: docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.1
+  FIMTYPER_CONTAINER_URI    default: docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.2
 EOF
 }
 
@@ -47,7 +47,7 @@ force=0
 
 mlst_uri="${MLST_CONTAINER_URI:-docker://quay.io/biocontainers/mlst:2.33.1--hdfd78af_0}"
 kleborate_uri="${KLEBORATE_CONTAINER_URI:-docker://quay.io/biocontainers/kleborate:2.3.2--pyhdfd78af_0}"
-fimtyper_uri="${FIMTYPER_CONTAINER_URI:-docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.1}"
+fimtyper_uri="${FIMTYPER_CONTAINER_URI:-docker://ghcr.io/sethiyap/agar-bactopia-fimtyper:1.2}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
