@@ -218,6 +218,14 @@ if [[ -n $pipeline_config ]]; then
   source "$pipeline_config"
 fi
 
+# A stale TMPDIR inherited from the caller's shell (e.g. pointing at a directory that
+# has since been deleted) makes mktemp and other tools fail mid-run. If TMPDIR is set
+# but is not a writable directory, fall back to the system default for this run.
+if [[ -n ${TMPDIR:-} && ( ! -d ${TMPDIR} || ! -w ${TMPDIR} ) ]]; then
+  echo "[submit] WARNING: TMPDIR=$TMPDIR is not a writable directory; falling back to /tmp." >&2
+  export TMPDIR=/tmp
+fi
+
 if [[ $# -lt 3 || $# -gt 4 ]]; then
   usage >&2
   exit 1

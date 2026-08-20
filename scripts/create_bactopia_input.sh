@@ -33,8 +33,12 @@ if [[ $input_type == "illumina" ]]; then
   exec bash "$illumina_fofn_script" "$input_dir" "$output_file"
 fi
 
-tmp_file=$(mktemp "${TMPDIR:-/tmp}/bactopia-input.XXXXXX")
-paths_file=$(mktemp "${TMPDIR:-/tmp}/bactopia-paths.XXXXXX")
+# Create temp files next to the output manifest (its dir is created above), not in
+# TMPDIR: a stale/invalid TMPDIR inherited from the caller's shell would otherwise
+# make mktemp fail here ("No such file or directory").
+_tmp_dir=$(dirname "$output_file")
+tmp_file=$(mktemp "${_tmp_dir}/bactopia-input.XXXXXX")
+paths_file=$(mktemp "${_tmp_dir}/bactopia-paths.XXXXXX")
 trap 'rm -f "$tmp_file" "$paths_file"' EXIT
 printf 'sample\truntype\tr1\tr2\textra\n' > "$tmp_file"
 
