@@ -40,15 +40,26 @@ def read_input_samples(path: Path, input_type: str) -> set[str]:
     samples: list[str] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         if input_type == "accession":
-            for line_number, line in enumerate(handle, start=1):
-                value = line.strip()
-                if not value:
-                    continue
-                if any(character.isspace() for character in value):
-                    raise ValueError(
-                        f"Accession file line {line_number} must contain one accession only: {value}"
-                    )
-                samples.append(value)
+            lines = handle.read().splitlines()
+            first = lines[0].lstrip("﻿").strip() if lines else ""
+            if first.split("\t", 1)[0].lower() == "accession":
+                # Bactopia --accessions TSV (accession/runtype/genome_size/species):
+                # take the accession column, skipping the header row.
+                for row in lines[1:]:
+                    acc = row.split("\t", 1)[0].strip()
+                    if acc:
+                        samples.append(acc)
+            else:
+                # Backward-compatible: one accession per line.
+                for line_number, line in enumerate(lines, start=1):
+                    value = line.strip()
+                    if not value:
+                        continue
+                    if any(character.isspace() for character in value):
+                        raise ValueError(
+                            f"Accession file line {line_number} must contain one accession only: {value}"
+                        )
+                    samples.append(value)
         else:
             reader = csv.reader(handle, delimiter="\t")
             header = next(reader, None)

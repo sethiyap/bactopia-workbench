@@ -60,6 +60,10 @@ if [[ "$header" == "sample,r1,r2"* ]]; then
   has_header=1
 elif [[ "$header" == $'sample\truntype\tr1\tr2'* ]]; then
   has_header=1
+elif [[ "$header" == $'accession\t'* ]]; then
+  # Bactopia --accessions TSV (accession/runtype/genome_size/species): the header
+  # must be repeated in every batch so each batch parses as a headed CSV.
+  has_header=1
 fi
 
 awk -v header="$header" -v batch_size="$batch_size" -v output_dir="$output_dir" -v prefix="$prefix" -v extension="$extension" -v has_header="$has_header" '

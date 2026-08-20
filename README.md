@@ -578,27 +578,44 @@ EXCLUDE_SAMPLE_REGEX='unclassified|lambda|neg' \
 
 ### Submit SRA/ENA Or NCBI Assembly Accessions
 
-Create a plain, headerless text file with one accession per line (SRA/ENA read
-accessions and NCBI assembly accessions can be mixed). Each accession must also
-appear in the metadata `Sample name` column.
+**You provide two files:**
+
+1. **An accessions list** — a plain text file, **one accession per line** (blank
+   lines and `#` comments are ignored). Any mix of:
+   - **Assembly**: `GCF_…` / `GCA_…`
+   - **Experiment**: `SRX…` / `ERX…` / `DRX…`
+   - **Run**: `SRR…` / `ERR…` / `DRR…` — these are **auto-resolved to their
+     Experiment accession via ENA** (Bactopia 3.2.0 only accepts Experiment or
+     Assembly accessions, not Run accessions).
+2. **A metadata samplesheet** whose `Sample name` column holds the accession **as
+   it appears in results** — i.e. the **Experiment/Assembly** accession (for
+   assemblies, the versionless form, e.g. `GCF_000005845`). When you start from
+   Run accessions, the pipeline prints the run→experiment resolution and writes
+   `<RESULTS_ROOT>/<prefix>_accession_map.tsv`, so you know exactly which
+   accessions to put in `Sample name`.
 
 ```bash
 ./bin/bactopia-workbench submit gadi \
   --input-type accession \
   /path/to/accessions.txt \
   /path/to/metadata \
-  /path/to/results_accessions \
-  20
+  /path/to/results_accessions
 ```
 
-The launcher splits the list into batches and passes each batch to Bactopia with
-`--accessions`. **Bactopia downloads each accession automatically** — SRA/ENA
-run accessions are fetched as reads, and NCBI `GCF_`/`GCA_` accessions are
-fetched as assemblies; there is no separate download step to run. Because the
-download happens inside the batch job, **the compute node must have network
-access** (on Gadi, normal compute nodes may not — check your queue/site before
-submitting large accession runs). `--input-type accessions` is also accepted as
-an alias.
+Under the hood the launcher converts your list into the tab-separated
+`accession/runtype/genome_size/species` file Bactopia 3.2.0 requires (resolving
+Run→Experiment, tagging ONT runs, and filling species from ENA), splits it into
+batches, and passes each batch to Bactopia with `--accessions`. **Bactopia
+downloads each accession automatically** — Experiment accessions are fetched as
+reads, `GCF_`/`GCA_` accessions as assemblies; there is no separate download step.
+Because the download happens inside the batch job, **the compute node must have
+network access** (on Gadi, normal compute nodes may not — check your queue/site
+before submitting large accession runs). `--input-type accessions` is also
+accepted as an alias.
+
+> Tip: to find the Experiment accession for a Run yourself, query ENA —
+> `https://www.ebi.ac.uk/ena/portal/api/filereport?accession=SRR…&result=read_run&fields=experiment_accession`
+> — or just run the pipeline once and read `<prefix>_accession_map.tsv`.
 
 ### Validate The Installation Before Submitting
 

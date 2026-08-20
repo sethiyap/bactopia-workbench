@@ -334,6 +334,7 @@ split_script=${SPLIT_SAMPLESHEET_SCRIPT:-$script_dir/split_bactopia_samplesheet.
 normalize_script=${NORMALIZE_SCRIPT:-$script_dir/normalize_agar_fastq_sample_names.sh}
 validate_script=${VALIDATE_FOFN_SCRIPT:-$script_dir/validate_bactopia_fofn.sh}
 validate_metadata_script=${VALIDATE_METADATA_SCRIPT:-$script_dir/validate_metadata_samples.py}
+prepare_accessions_script=${PREPARE_ACCESSIONS_SCRIPT:-$script_dir/prepare_accessions.sh}
 consolidate_pbs_script=${CONSOLIDATE_PBS_SCRIPT:-$script_dir/run_consolidate_batches.pbs}
 consolidate_r_script=${CONSOLIDATE_SCRIPT:-$script_dir/consolidate_bactopia_batches.R}
 map_pbs_script=${MAP_PBS_SCRIPT:-$script_dir/run_map_samplesheet_results.pbs}
@@ -1104,6 +1105,22 @@ case "$input_type" in
     [[ -f $input_source ]] || fail "Accession file not found: $input_source"
     ;;
 esac
+
+# Accession input: Bactopia 3.2.0 needs a TAB-separated file with a header
+# (accession/runtype/genome_size/species) and Experiment (SRX/ERX/DRX) or Assembly
+# (GCF_/GCA_) accessions. Convert the user's simple one-per-line list -- resolving
+# Run accessions (SRR/ERR/DRR) to Experiment accessions via ENA -- and use that TSV
+# for validation, batching, and Bactopia's --accessions. The resolution is also
+# written to <RESULTS_ROOT>/<prefix>_accession_map.tsv.
+if [[ $input_type == "accession" ]]; then
+  [[ -f $prepare_accessions_script ]] || fail "Required script not found: $prepare_accessions_script"
+  accession_tsv="$results_root_arg/tmp/accessions.bactopia.tsv"
+  accession_map="$results_root_arg/${metadata_output_prefix:-accessions}_accession_map.tsv"
+  bash "$prepare_accessions_script" "$input_source" "$accession_tsv" "$accession_map" \
+    || fail "Failed to prepare accession list for Bactopia (see messages above)."
+  samplesheet_path=$accession_tsv
+  log "INFO" "Resolved accessions written to Bactopia format: $accession_tsv (map: $accession_map)"
+fi
 
 if [[ ! -d $metadata_dir ]]; then
   fail "METADATA_DIR not found: $metadata_dir"
