@@ -218,14 +218,6 @@ if [[ -n $pipeline_config ]]; then
   source "$pipeline_config"
 fi
 
-# A stale TMPDIR inherited from the caller's shell (e.g. pointing at a directory that
-# has since been deleted) makes mktemp and other tools fail mid-run. If TMPDIR is set
-# but is not a writable directory, fall back to the system default for this run.
-if [[ -n ${TMPDIR:-} && ( ! -d ${TMPDIR} || ! -w ${TMPDIR} ) ]]; then
-  echo "[submit] WARNING: TMPDIR=$TMPDIR is not a writable directory; falling back to /tmp." >&2
-  export TMPDIR=/tmp
-fi
-
 if [[ $# -lt 3 || $# -gt 4 ]]; then
   usage >&2
   exit 1
@@ -234,6 +226,17 @@ fi
 input_source=$1
 metadata_dir=$2
 results_root_arg=$3
+
+# Root all pipeline temp files under the user-provided output directory (created here),
+# on the same filesystem as the results, instead of trusting the caller's shell TMPDIR
+# (which may be unset, small, or stale/deleted -- a common cause of mid-run mktemp
+# failures). Stages that pin their own TMPDIR (e.g. the Nextflow batch jobs ->
+# NXF_WORK/tmp) still do so, and that work dir also lives under this results tree.
+mkdir -p "$results_root_arg/tmp"
+TMPDIR=$(cd "$results_root_arg/tmp" && pwd)
+export TMPDIR
+export NXF_TEMP="$TMPDIR"
+
 batch_size=${4:-50}
 input_type=${input_type_override:-${INPUT_TYPE:-illumina}}
 input_type=$(printf '%s' "$input_type" | tr '[:upper:]' '[:lower:]')
