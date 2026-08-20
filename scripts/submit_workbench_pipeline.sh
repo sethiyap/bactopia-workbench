@@ -775,7 +775,17 @@ run_dry_run_validation() {
   if [[ $postprocess_only == 1 ]]; then
     dry_run_pass "POSTPROCESS_ONLY=1, so FOFN creation and batch submission checks were skipped"
   else
-    if [[ -f $samplesheet_path ]]; then
+    if [[ $input_type == "accession" ]]; then
+      # Accession input is the resolved Bactopia --accessions TSV (already checked by
+      # the metadata-coverage and batch-split steps), not a sample/runtype/r1/r2 FOFN,
+      # so the FOFN structure validator does not apply here.
+      if [[ -f $samplesheet_path ]]; then
+        active_samplesheet=$samplesheet_path
+        dry_run_pass "Accession list resolved to Bactopia format: $samplesheet_path"
+      else
+        dry_run_fail "Resolved accession TSV not found: $samplesheet_path"
+      fi
+    elif [[ -f $samplesheet_path ]]; then
       active_samplesheet=$samplesheet_path
       if bash "$validate_script" "$active_samplesheet" "$input_type" >/dev/null 2>&1; then
         dry_run_pass "Existing ${input_type} input manifest validated: $active_samplesheet"
@@ -1329,7 +1339,11 @@ fi
 if [[ $postprocess_only != 1 && $skip_validate != 1 ]]; then
   current_step="validating Bactopia input and metadata coverage"
   log "INFO" "Validating ${input_type} input manifest: $samplesheet_path"
-  bash "$validate_script" "$samplesheet_path" "$input_type"
+  # Accession input is the resolved Bactopia --accessions TSV, not a
+  # sample/runtype/r1/r2 FOFN, so the FOFN structure validator does not apply.
+  if [[ $input_type != "accession" ]]; then
+    bash "$validate_script" "$samplesheet_path" "$input_type"
+  fi
   "$metadata_validation_python_bin" "$validate_metadata_script" \
     --input "$samplesheet_path" \
     --input-type "$input_type" \
