@@ -160,6 +160,40 @@ step and no `pip`/`conda` package to install. You clone it, then follow the setu
 guide for your environment ([Submission Modes](#submission-modes)) to install the
 external dependencies and write your site config.
 
+### Prerequisites
+
+`bactopia-workbench` only orchestrates other tools — it does **not** bundle them.
+Install the following on the host **before** you clone and run the workbench. On
+the shared **rg42** Gadi install these are already provided (see
+[docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md)); on any other host you must
+supply them yourself.
+
+**Required**
+
+- **Bactopia v3.2.0** — the pipeline the workbench drives. Also install its
+  **custom datasets** and **Kleborate** →
+  [docs/bactopia-setup.md](docs/bactopia-setup.md).
+- **Nextflow** — the workflow engine Bactopia runs on.
+- A **container engine** — **Singularity**/**Apptainer** (recommended on HPC) or
+  **Docker**. Tool images are pulled automatically on first run (needs internet;
+  see [Tool container images](#tool-container-images)).
+- **R** — for consolidating and mapping results.
+- **conda/mamba** with **`mlst`** and **`seqkit`** on `PATH` — for MLST review.
+- **`python3`** with **`openpyxl`** — for the Excel workbook export.
+
+**Optional (on by default, auto-skipped if absent)**
+
+- **ST131Typer** (`ST131_TYPER_DIR`) — also needs `mlst`/`seqkit` on `PATH`.
+- **FimTyper** — no public container image; build a `.sif` or run it natively
+  (see [FimTyper](#fimtyper)).
+
+On non-Gadi hosts, `./scripts/install_optional_local_tools.sh` installs Miniforge,
+the `mlst`+`seqkit` conda env, and ST131Typer in one step (details in
+[step 2](#2-external-dependencies-installed-once-per-environment) below). It does
+**not** install Bactopia, the datasets, Nextflow, the container engine, or
+`openpyxl` — provide those first. Full list:
+[docs/runtime-dependencies.md](docs/runtime-dependencies.md).
+
 ### 1. Get the code
 
 ```bash
