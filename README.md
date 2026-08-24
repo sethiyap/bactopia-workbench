@@ -287,8 +287,13 @@ follow its setup guide. All three end in the same universal command
 
 ### 1. PBS submission (NCI Gadi) — `submit gadi`
 
-For the PBS Pro scheduler on **NCI Gadi**. Jobs are submitted with `qsub`. This
-covers both Gadi deployments:
+For the PBS Pro scheduler on **NCI Gadi**. Jobs are submitted with `qsub`.
+
+> ⚠️ **Accession/SRA input does not work on Gadi** — compute nodes have no
+> internet, so Bactopia can't download from SRA/ENA/NCBI. Stage reads/assemblies on
+> `/g/data` or `/scratch` and use `--input-type illumina|ont|assembly` instead.
+
+This covers both Gadi deployments:
 
 - **Shared `rg42` install** — already installed and configured; you just move
   data in, submit, and copy results back →
@@ -651,9 +656,14 @@ batches, and passes each batch to Bactopia with `--accessions`. **Bactopia
 downloads each accession automatically** — Experiment accessions are fetched as
 reads, `GCF_`/`GCA_` accessions as assemblies; there is no separate download step.
 Because the download happens inside the batch job, **the compute node must have
-network access** (on Gadi, normal compute nodes may not — check your queue/site
-before submitting large accession runs). `--input-type accessions` is also
-accepted as an alias.
+internet access**. `--input-type accessions` is also accepted as an alias.
+
+> ⚠️ **Accession/SRA input does NOT work on NCI Gadi.** Gadi compute nodes have
+> **no internet access**, so Bactopia cannot download reads/assemblies from
+> SRA/ENA/NCBI — accession runs will fail there. Use accession input only where the
+> compute nodes reach the internet (e.g. the `local`/firefly backend). For Gadi,
+> download the data elsewhere, stage it on `/g/data` or `/scratch`, and submit with
+> `--input-type illumina|ont|assembly`.
 
 > Tip: to find the Experiment accession for a Run yourself, query ENA —
 > `https://www.ebi.ac.uk/ena/portal/api/filereport?accession=SRR…&result=read_run&fields=experiment_accession`
