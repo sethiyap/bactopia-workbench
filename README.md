@@ -178,8 +178,15 @@ supply them yourself.
   **Docker**. Tool images are pulled automatically on first run (needs internet;
   see [Tool container images](#tool-container-images)).
 - **R** — for consolidating and mapping results.
-- **conda/mamba** with **`mlst`** and **`seqkit`** on `PATH` — for MLST review.
-- **`python3`** with **`openpyxl`** — for the Excel workbook export.
+- **conda/mamba** — a **single** environment (this becomes your `MLST_ENV`)
+  providing **`mlst`**, **`seqkit`**, and Python **`openpyxl`** *together*. The
+  workbook exporter runs `MLST_ENV/bin/python3`, so `openpyxl` must live in **this
+  same env**, not a separate Python. (`mlst`/`seqkit` drive MLST review + ST131Typer;
+  `openpyxl` writes the `.xlsx`.) Create it with:
+
+  ```bash
+  conda create -p /path/to/mlst_env -c conda-forge -c bioconda mlst seqkit openpyxl
+  ```
 
 **Optional (on by default, auto-skipped if absent)**
 
@@ -188,10 +195,11 @@ supply them yourself.
   (see [FimTyper](#fimtyper)).
 
 On non-Gadi hosts, `./scripts/install_optional_local_tools.sh` installs Miniforge,
-the `mlst`+`seqkit` conda env, and ST131Typer in one step (details in
+the `MLST_ENV` conda env (**`mlst` + `seqkit` + `openpyxl`**), and ST131Typer in one
+step (details in
 [step 2](#2-external-dependencies-installed-once-per-environment) below). It does
-**not** install Bactopia, the datasets, Nextflow, the container engine, or
-`openpyxl` — provide those first. Full list:
+**not** install Bactopia, the datasets, Nextflow, or the container engine — provide
+those first. Full list:
 [docs/runtime-dependencies.md](docs/runtime-dependencies.md).
 
 ### 1. Get the code

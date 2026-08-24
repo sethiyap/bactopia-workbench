@@ -9,7 +9,7 @@ Usage:
 
 Installs local optional helpers for non-Gadi/non-rg42 use:
   - Miniforge
-  - a dedicated Conda env containing mlst + seqkit
+  - a dedicated Conda env containing mlst + seqkit + openpyxl
   - ST131Typer cloned from GitHub
 
 Defaults:
@@ -146,18 +146,21 @@ install_mlst_env() {
 
   if [[ -d "$mlst_env" ]]; then
     if [[ $force -eq 1 ]]; then
-      log "Updating existing mlst/seqkit env at ${mlst_env}"
-      conda install -y -p "$mlst_env" -c conda-forge -c bioconda mlst seqkit
+      log "Updating existing mlst/seqkit/openpyxl env at ${mlst_env}"
+      conda install -y -p "$mlst_env" -c conda-forge -c bioconda mlst seqkit openpyxl
     else
-      log "mlst/seqkit env already present at ${mlst_env}"
+      log "mlst/seqkit/openpyxl env already present at ${mlst_env}"
     fi
   else
-    log "Creating mlst/seqkit env at ${mlst_env}"
-    conda create -y -p "$mlst_env" -c conda-forge -c bioconda mlst seqkit
+    log "Creating mlst/seqkit/openpyxl env at ${mlst_env}"
+    conda create -y -p "$mlst_env" -c conda-forge -c bioconda mlst seqkit openpyxl
   fi
 
+  # mlst + seqkit drive MLST review / ST131Typer; openpyxl is used by the workbook
+  # exporter, which runs $mlst_env/bin/python3 -- so it must live in this same env.
   conda run -p "$mlst_env" mlst --version >/dev/null
   conda run -p "$mlst_env" seqkit version >/dev/null
+  conda run -p "$mlst_env" python3 -c "import openpyxl" >/dev/null
 }
 
 install_st131typer() {
@@ -205,6 +208,7 @@ Verification:
   source "${miniforge_root}/etc/profile.d/conda.sh"
   conda run -p "${mlst_env}" mlst --version
   conda run -p "${mlst_env}" seqkit version
+  conda run -p "${mlst_env}" python3 -c "import openpyxl; print('openpyxl', openpyxl.__version__)"
   "${st131_repo_dir}/ST131Typer.sh" -v
   "${st131_repo_dir}/ST131Typer.sh" -c
 EOF
