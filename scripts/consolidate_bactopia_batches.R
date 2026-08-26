@@ -973,7 +973,10 @@ for (batch_dir in batch_dirs) {
     main_batch_names_by_base[[base]] <- c(main_batch_names_by_base[[base]], batch_name)
   }
 
-  for (suffix in c("_tools", "_kleborate", "_fimtyper", "_bracken_only")) {
+  # "_padloc" holds the standalone PADLOC stage's results_padloc/ (per-sample
+  # summary) and results_padloc_genes/ (per-gene hits); both are picked up by the
+  # generic results_<tool>/merged-results/ path below.
+  for (suffix in c("_tools", "_kleborate", "_fimtyper", "_bracken_only", "_padloc")) {
     tool_parent_dir <- file.path(results_root, paste0(batch_name, suffix))
     collected <- collect_tool_tables(
       tool_parent_dir,

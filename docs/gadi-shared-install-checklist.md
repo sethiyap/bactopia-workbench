@@ -23,6 +23,19 @@ Optional shared external references:
 /g/data/rg42/custom_bactopia_refs/fimtyper/
 ```
 
+Optional, only when PADLOC is enabled (`RUN_PADLOC=1` / `--padloc`):
+
+```text
+/g/data/rg42/bactopia_datasets/envs/padloc_env/     # PADLOC_ENV
+/g/data/rg42/bactopia_datasets/padloc-db/           # PADLOC_DB
+```
+
+Both must be created from a **login node** — Gadi compute nodes have no internet,
+so neither the conda install nor `padloc --db-update` can run inside a job. See
+[First-time PADLOC setup on Gadi](../README.md#first-time-padloc-setup-on-gadi) for
+the full sequence, then apply the same group-permission pattern used for
+`mlst_env` below.
+
 ## What Must Be In The Shared Project
 
 The shared checkout should contain the full repo:

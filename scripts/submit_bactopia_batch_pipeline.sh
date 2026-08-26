@@ -44,6 +44,14 @@ Environment variables:
   MERGE_FIMTYPER_SCRIPT   Optional merge helper run after FimTyper
   FIMTYPER_PROFILE        Optional Nextflow profile for FimTyper
   FIMTYPER_AFTER          assembly|tools|kleborate|all_tools, default: all_tools
+  RUN_PADLOC              Default: 0. PADLOC is not a Bactopia v3.2.0 tool, so it
+                          runs as a standalone per-batch stage on the assemblies.
+                          Skipped with a warning if no install can be reached.
+  PADLOC_ENV              conda env prefix providing bin/padloc
+  PADLOC_BIN              Explicit path to the padloc executable
+  PADLOC_CONTAINER        Singularity/Apptainer image (requires PADLOC_DB)
+  PADLOC_DB               PADLOC-DB dir. Empty = the install's own data dir
+  PADLOC_CPUS             Default: 8
   RUN_COLLECT_ASSEMBLIES  Default: 1
   ASSEMBLIES_OUTDIR       Default: <results_root>/<basename(results_root)>_assemblies
   RUN_ST131_TYPER         Default: 0
@@ -124,6 +132,29 @@ MYKROBE_SPECIES=${MYKROBE_SPECIES:-}
 DEFENSEFINDER_DB=${DEFENSEFINDER_DB:-}
 MASH_SKETCH=${MASH_SKETCH:-}
 RUN_KLEBORATE=${RUN_KLEBORATE:-1}
+# PADLOC is a standalone stage (not a Bactopia tool); off unless an install is
+# configured. See config/defaults.env for the PADLOC_* variables.
+RUN_PADLOC=${RUN_PADLOC:-0}
+PADLOC_ENV=${PADLOC_ENV:-}
+PADLOC_BIN=${PADLOC_BIN:-}
+PADLOC_CONTAINER=${PADLOC_CONTAINER:-}
+PADLOC_DB=${PADLOC_DB:-}
+PADLOC_CPUS=${PADLOC_CPUS:-8}
+PADLOC_KEEP_INTERMEDIATES=${PADLOC_KEEP_INTERMEDIATES:-0}
+# Mirrors the FimTyper container check below: if PADLOC is requested but no install
+# can be reached, warn and skip rather than failing every batch deep in the stage.
+if [[ $RUN_PADLOC != 0 ]]; then
+  if [[ -n ${PADLOC_BIN} && ! -x ${PADLOC_BIN} ]]; then
+    echo "[batch] WARNING: PADLOC_BIN not executable (${PADLOC_BIN}); skipping PADLOC. Set RUN_PADLOC=0 to silence this." >&2
+    RUN_PADLOC=0
+  elif [[ -z ${PADLOC_BIN} && -n ${PADLOC_ENV} && ! -x ${PADLOC_ENV}/bin/padloc ]]; then
+    echo "[batch] WARNING: padloc not found in PADLOC_ENV (${PADLOC_ENV}/bin/padloc); skipping PADLOC. Set RUN_PADLOC=0 to silence this." >&2
+    RUN_PADLOC=0
+  elif [[ -z ${PADLOC_BIN} && -z ${PADLOC_ENV} && -z ${PADLOC_CONTAINER} ]] && ! command -v padloc >/dev/null 2>&1; then
+    echo "[batch] WARNING: no PADLOC install found (set PADLOC_ENV, PADLOC_BIN or PADLOC_CONTAINER); skipping PADLOC. Set RUN_PADLOC=0 to silence this." >&2
+    RUN_PADLOC=0
+  fi
+fi
 RUN_FIMTYPER=${RUN_FIMTYPER:-1}
 # FimTyper defaults on. In container mode (no FIMTYPER_DIR), if an explicit LOCAL
 # .sif path is given via FIMTYPER_CONTAINER but is missing, skip FimTyper with a
@@ -416,10 +447,12 @@ for batch_file in "${selected_batch_files[@]}"; do
   tools_outdir=${RESULTS_ROOT}/${run_label}_tools
   kleborate_outdir=${RESULTS_ROOT}/${run_label}_kleborate
   fimtyper_outdir=${RESULTS_ROOT}/${run_label}_fimtyper
+  padloc_outdir=${RESULTS_ROOT}/${run_label}_padloc
   assembly_job_name=$(printf 'b%s_bactopia' "$batch_id")
   tools_job_name=$(printf 'tools_b%s' "$batch_id")
   kleborate_job_name=$(printf 'klebo_b%s' "$batch_id")
   fimtyper_job_name=$(printf 'fimtyper_b%s' "$batch_id")
+  padloc_job_name=$(printf 'padloc_b%s' "$batch_id")
 
   assembly_dependency=
   if [[ $BATCH_CHAIN == 1 && -n "$previous_batch_terminal_job" ]]; then
@@ -495,6 +528,22 @@ for batch_file in "${selected_batch_files[@]}"; do
     echo "${run_label}: kleborate job ${kleborate_job}"
   fi
 
+  # PADLOC only needs this batch's assemblies, so it runs alongside the tool and
+  # Kleborate stages rather than extending the FimTyper dependency chain. It is
+  # added to terminal_jobs separately so consolidation still waits for it.
+  padloc_job=
+  if [[ $RUN_PADLOC != 0 ]]; then
+    padloc_job=$(scheduler_submit \
+      "$padloc_job_name" \
+      "$assembly_job" \
+      "RESULTS_MAIN=${results_main},RUN_LABEL=${run_label}_padloc,RESULTS_OUT=${padloc_outdir},RESULTS_ROOT=${RESULTS_ROOT},PADLOC_ENV=${PADLOC_ENV},PADLOC_BIN=${PADLOC_BIN},PADLOC_CONTAINER=${PADLOC_CONTAINER},PADLOC_DB=${PADLOC_DB},PADLOC_CPUS=${PADLOC_CPUS},PADLOC_KEEP_INTERMEDIATES=${PADLOC_KEEP_INTERMEDIATES},MERGE_PADLOC_SCRIPT=${script_dir}/merge_padloc_summary.sh,SING_CACHE=${SING_CACHE}" \
+      "$script_dir/run_padloc_batch.pbs" \
+      "$PBS_LOG_DIR" \
+      "$PBS_MAIL_OPTIONS" \
+      "$PBS_MAIL_USER")
+    echo "${run_label}: padloc job ${padloc_job}"
+  fi
+
   case "$FIMTYPER_AFTER" in
     assembly)
       dependency_job=$assembly_job
@@ -540,8 +589,21 @@ for batch_file in "${selected_batch_files[@]}"; do
     dependency_job=$fimtyper_job
   fi
 
-  terminal_jobs+=("${dependency_job}")
-  previous_batch_terminal_job=$dependency_job
+  # PADLOC runs off to the side of the FimTyper chain, so both its job and the
+  # chain's terminal job must gate consolidation (and the next batch, when
+  # BATCH_CHAIN=1). Colon-joined ids are what both qsub -W depend and sbatch
+  # --dependency expect.
+  batch_terminal_job=$dependency_job
+  if [[ -n $padloc_job ]]; then
+    if [[ -n $batch_terminal_job ]]; then
+      batch_terminal_job="${batch_terminal_job}:${padloc_job}"
+    else
+      batch_terminal_job=$padloc_job
+    fi
+  fi
+
+  terminal_jobs+=("${batch_terminal_job}")
+  previous_batch_terminal_job=$batch_terminal_job
 done
 
 if [[ $RUN_COLLECT_ASSEMBLIES != 0 && ${#assembly_jobs[@]} -gt 0 ]]; then

@@ -11,6 +11,7 @@ Usage:
   ./bin/bactopia-workbench submit gadi --input-type accession ACCESSIONS.txt METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
   ./bin/bactopia-workbench submit gadi --additional-tools yes RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
   ./bin/bactopia-workbench submit gadi --dry-run RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+  ./bin/bactopia-workbench submit gadi --padloc RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
   ./bin/bactopia-workbench submit gadi --is-agar-project 0 RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
   ./bin/bactopia-workbench submit gadi --mail-user you@example.org [--mail-options ae] RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
   ./bin/bactopia-workbench submit slurm RAW_FASTQ_DIR METADATA_DIR RESULTS_ROOT [BATCH_SIZE]

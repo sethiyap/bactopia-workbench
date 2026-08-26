@@ -1,0 +1,250 @@
+#!/bin/bash
+#PBS -P rg42
+#PBS -q normal
+#PBS -l walltime=24:00:00
+#PBS -l ncpus=8
+#PBS -l mem=32GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/rg42+gdata/rg42
+#PBS -N padloc_batch
+#PBS -l wd
+
+set -euo pipefail
+
+# Run PADLOC (antiviral/anti-phage defence system detection) over one batch's
+# Bactopia assemblies.
+#
+# PADLOC is NOT a Bactopia v3.2.0 bactopia-tool, so it cannot go in TOOLS_STRING;
+# this is a standalone stage in the FimTyper / ST131Typer mould. Output is written
+# in the layout the consolidation stage already understands:
+#
+#   ${RESULTS_OUT}/results_padloc/merged-results/padloc_merged.tsv
+#       one row per sample -> consolidated -> joined onto the mapped sheet
+#   ${RESULTS_OUT}/results_padloc/padloc_status.tsv
+#       per-sample run status (outside merged-results, so consolidation ignores it)
+#   ${RESULTS_OUT}/results_padloc/per_sample/
+#       PADLOC's raw per-sample output (kept out of <sample>/tools/<tool>/ so the
+#       consolidator's sample-level scan does not pick it up as a second table)
+#   ${RESULTS_OUT}/results_padloc_genes/merged-results/padloc_genes_merged.tsv
+#       one row per gene hit -> consolidated as its own workbook sheet
+#
+# Example:
+#   qsub -v "RESULTS_MAIN=/path/to/results_main,RESULTS_OUT=/path/to/batch_padloc,PADLOC_ENV=/opt/conda/envs/padloc_2.0.0" \
+#     scripts/run_padloc_batch.pbs
+
+###############################################################################
+# User settings
+###############################################################################
+PROJECT=${PROJECT:-rg42}
+USER_NAME=${USER_NAME:-$USER}
+
+# Existing main Bactopia results directory for this batch.
+RESULTS_MAIN=${RESULTS_MAIN:-}
+
+RUN_LABEL=${RUN_LABEL:-padloc_${PBS_JOBID:-manual}}
+RESULTS_ROOT=${RESULTS_ROOT:-/scratch/${PROJECT}/${USER_NAME}/bactopia_results}
+RESULTS_OUT=${RESULTS_OUT:-${RESULTS_ROOT}/${RUN_LABEL}}
+WORK_ROOT=${WORK_ROOT:-${RESULTS_ROOT}/_work/bactopia_padloc/${RUN_LABEL}}
+
+# How to reach PADLOC. First match wins:
+#   PADLOC_BIN        explicit path to the padloc executable
+#   PADLOC_ENV        conda env prefix (uses $PADLOC_ENV/bin/padloc)
+#   padloc on PATH
+#   PADLOC_CONTAINER  Singularity/Apptainer image (see the note below)
+PADLOC_BIN=${PADLOC_BIN:-}
+PADLOC_ENV=${PADLOC_ENV:-}
+PADLOC_CONTAINER=${PADLOC_CONTAINER:-}
+
+# PADLOC-DB directory. Leave empty to use PADLOC's own default, which is
+# <padloc install>/../data -- correct for a conda env that has already had
+# `padloc --db-update` run into it. Set this to a pre-staged PADLOC-DB when the
+# install's own data dir is missing or unwritable (e.g. Gadi).
+PADLOC_DB=${PADLOC_DB:-}
+
+PADLOC_CPUS=${PADLOC_CPUS:-${NCPUS:-${SLURM_CPUS_PER_TASK:-8}}}
+MERGE_PADLOC_SCRIPT=${MERGE_PADLOC_SCRIPT:-}
+
+# PADLOC's intermediates (HMMER domain tables and Prodigal predictions) are large
+# and reproducible; drop them by default and keep only *_padloc.csv / *_padloc.gff.
+PADLOC_KEEP_INTERMEDIATES=${PADLOC_KEEP_INTERMEDIATES:-0}
+
+SING_CACHE=${SING_CACHE:-/scratch/${PROJECT}/${USER_NAME}/singularity_cache}
+###############################################################################
+
+log() {
+  printf '[padloc] %s\n' "$*"
+}
+
+fail() {
+  printf '[padloc] ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ -n "$RESULTS_MAIN" ]] || fail "RESULTS_MAIN is required."
+[[ -d "$RESULTS_MAIN" ]] || fail "RESULTS_MAIN not found: $RESULTS_MAIN"
+
+if [[ -z "$MERGE_PADLOC_SCRIPT" ]]; then
+  MERGE_PADLOC_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge_padloc_summary.sh"
+fi
+[[ -f "$MERGE_PADLOC_SCRIPT" ]] || fail "MERGE_PADLOC_SCRIPT not found: $MERGE_PADLOC_SCRIPT"
+
+# If the batch produced no assemblies (e.g. all samples were dropped at QC), there
+# is nothing to scan. Skip gracefully, exactly like the FimTyper stage does.
+shopt -s nullglob
+assemblies=("$RESULTS_MAIN"/*/main/assembler/*.fna.gz "$RESULTS_MAIN"/*/main/assembler/*.fna)
+shopt -u nullglob
+if [[ ${#assemblies[@]} -eq 0 ]]; then
+  log "No assemblies under $RESULTS_MAIN (*/main/assembler/*.fna[.gz]); skipping PADLOC for this batch."
+  mkdir -p "$RESULTS_OUT/results_padloc"
+  exit 0
+fi
+
+###############################################################################
+# Resolve the padloc command
+###############################################################################
+padloc_cmd=()
+padloc_mode=""
+
+if [[ -n "$PADLOC_BIN" ]]; then
+  [[ -x "$PADLOC_BIN" ]] || fail "PADLOC_BIN is not executable: $PADLOC_BIN"
+  padloc_cmd=("$PADLOC_BIN")
+  padloc_mode="PADLOC_BIN=$PADLOC_BIN"
+elif [[ -n "$PADLOC_ENV" ]]; then
+  [[ -x "$PADLOC_ENV/bin/padloc" ]] || fail "padloc not found in PADLOC_ENV: $PADLOC_ENV/bin/padloc"
+  # padloc shells out to prodigal, hmmsearch and Rscript by bare name, and on
+  # PBS/Slurm only declared job variables are forwarded (no ambient shell), so the
+  # env's bin must go on PATH -- not just the padloc executable.
+  export PATH="${PADLOC_ENV}/bin:$PATH"
+  padloc_cmd=("$PADLOC_ENV/bin/padloc")
+  padloc_mode="PADLOC_ENV=$PADLOC_ENV"
+elif command -v padloc >/dev/null 2>&1; then
+  padloc_cmd=(padloc)
+  padloc_mode="padloc on PATH ($(command -v padloc))"
+elif [[ -n "$PADLOC_CONTAINER" ]]; then
+  engine=""
+  if command -v singularity >/dev/null 2>&1; then
+    engine=singularity
+  elif command -v apptainer >/dev/null 2>&1; then
+    engine=apptainer
+  else
+    fail "PADLOC_CONTAINER is set but no singularity/apptainer on PATH."
+  fi
+  [[ -n "$PADLOC_DB" ]] || fail "PADLOC_CONTAINER requires PADLOC_DB (the image ships no database)."
+  [[ -d "$PADLOC_DB" ]] || fail "PADLOC_DB not found: $PADLOC_DB"
+  export SINGULARITY_CACHEDIR="$SING_CACHE"
+  # padloc runs `mkdir -p <install>/../data` at startup, before it parses --data,
+  # under `set -o errexit` -- on a read-only image that kills it before --data is
+  # ever read. --writable-tmpfs gives that mkdir somewhere to go. If your site
+  # disallows --writable-tmpfs, use PADLOC_ENV/PADLOC_BIN instead.
+  padloc_cmd=("$engine" exec --writable-tmpfs -B "$PADLOC_DB:/padloc-db" -B "$WORK_ROOT:$WORK_ROOT" "$PADLOC_CONTAINER" padloc)
+  PADLOC_DB=/padloc-db
+  padloc_mode="PADLOC_CONTAINER=$PADLOC_CONTAINER"
+else
+  fail "No PADLOC install found. Set PADLOC_ENV (conda env prefix), PADLOC_BIN, or PADLOC_CONTAINER."
+fi
+
+padloc_args=()
+if [[ -n "$PADLOC_DB" ]]; then
+  padloc_args+=(--data "$PADLOC_DB")
+fi
+
+###############################################################################
+# Run
+###############################################################################
+FNA_DIR="${WORK_ROOT}/fna"
+PADLOC_OUT="${WORK_ROOT}/padloc_out"
+STAGE_DIR="${WORK_ROOT}/results_padloc"
+GENES_STAGE_DIR="${WORK_ROOT}/results_padloc_genes"
+
+rm -rf "$STAGE_DIR" "$GENES_STAGE_DIR"
+mkdir -p "$FNA_DIR" "$PADLOC_OUT" "$STAGE_DIR/merged-results" "$GENES_STAGE_DIR/merged-results" "$RESULTS_OUT"
+
+samples_file="${WORK_ROOT}/padloc_samples.txt"
+status_file="${STAGE_DIR}/padloc_status.tsv"
+: > "$samples_file"
+printf 'sample\tstatus\n' > "$status_file"
+
+log "PADLOC source: $padloc_mode"
+log "PADLOC-DB: ${PADLOC_DB:-<padloc default: install dir/../data>}"
+log "Assemblies: ${#assemblies[@]} from $RESULTS_MAIN"
+log "CPUs per sample: $PADLOC_CPUS"
+
+failed=0
+for assembly in "${assemblies[@]}"; do
+  sample=$(basename "$assembly")
+  sample=${sample%.gz}
+  sample=${sample%.fna}
+
+  fna="${FNA_DIR}/${sample}.fna"
+  if [[ "$assembly" == *.gz ]]; then
+    gunzip -c "$assembly" > "$fna"
+  else
+    cp -f "$assembly" "$fna"
+  fi
+
+  printf '%s\n' "$sample" >> "$samples_file"
+
+  # Per-sample failures must not take down the batch: PADLOC exits non-zero for a
+  # genome under 100 kbp ("Prodigal works best with sequences > 100kbp"), which is
+  # a property of that assembly, not of the run. Record it and carry on.
+  if "${padloc_cmd[@]}" ${padloc_args[@]+"${padloc_args[@]}"} \
+      --fna "$fna" \
+      --outdir "$PADLOC_OUT" \
+      --cpu "$PADLOC_CPUS" \
+      >> "${WORK_ROOT}/padloc.${sample}.log" 2>&1; then
+    printf '%s\tok\n' "$sample" >> "$status_file"
+  else
+    failed=$((failed + 1))
+    printf '%s\tfailed\n' "$sample" >> "$status_file"
+    log "WARNING: PADLOC failed for ${sample}; see ${WORK_ROOT}/padloc.${sample}.log"
+  fi
+
+  rm -f "$fna"
+done
+
+if [[ $failed -gt 0 ]]; then
+  log "WARNING: PADLOC failed for ${failed}/${#assemblies[@]} sample(s). See $status_file"
+fi
+
+###############################################################################
+# Merge and publish
+###############################################################################
+bash "$MERGE_PADLOC_SCRIPT" \
+  "$PADLOC_OUT" \
+  "$samples_file" \
+  "${STAGE_DIR}/merged-results/padloc_merged.tsv" \
+  "${GENES_STAGE_DIR}/merged-results/padloc_genes_merged.tsv"
+
+# No systems in the whole batch -> no genes table -> do not publish an empty
+# results_padloc_genes/ for consolidation to walk into.
+if [[ ! -f "${GENES_STAGE_DIR}/merged-results/padloc_genes_merged.tsv" ]]; then
+  rm -rf "$GENES_STAGE_DIR"
+fi
+
+mkdir -p "${STAGE_DIR}/per_sample"
+if [[ "$PADLOC_KEEP_INTERMEDIATES" == "1" ]]; then
+  cp -f "$PADLOC_OUT"/* "${STAGE_DIR}/per_sample/" 2>/dev/null || true
+else
+  shopt -s nullglob
+  for keep in "$PADLOC_OUT"/*_padloc.csv "$PADLOC_OUT"/*_padloc.gff; do
+    cp -f "$keep" "${STAGE_DIR}/per_sample/"
+  done
+  shopt -u nullglob
+fi
+
+mkdir -p "${RESULTS_OUT}/results_padloc"
+rsync -a --delete "${STAGE_DIR}/" "${RESULTS_OUT}/results_padloc/"
+if [[ -d "$GENES_STAGE_DIR" ]]; then
+  mkdir -p "${RESULTS_OUT}/results_padloc_genes"
+  rsync -a --delete "${GENES_STAGE_DIR}/" "${RESULTS_OUT}/results_padloc_genes/"
+fi
+
+mkdir -p "${RESULTS_OUT}/logs/padloc"
+shopt -s nullglob
+padloc_logs=("${WORK_ROOT}"/padloc.*.log)
+shopt -u nullglob
+if [[ ${#padloc_logs[@]} -gt 0 ]]; then
+  rsync -a "${padloc_logs[@]}" "${RESULTS_OUT}/logs/padloc/"
+fi
+
+log "PADLOC batch complete: ${RESULTS_OUT}/results_padloc"

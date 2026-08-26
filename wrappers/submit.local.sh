@@ -36,6 +36,9 @@ Options:
   --exclude-samples REGEX       Skip samples whose name matches REGEX (case-
                                 insensitive), e.g. 'unclassified|lambda|neg' to drop
                                 ONT controls so they are never assembled.
+  --padloc | --no-padloc        Run (or skip) PADLOC defence-system detection on each
+                                batch's assemblies. Default: off. Needs PADLOC_ENV,
+                                PADLOC_BIN or PADLOC_CONTAINER in the site config.
   --dry-run                    Validate config, inputs, and dependencies without running jobs
   --is-agar-project auto|1|0   Override AGAR auto-detection for mixed or non-AGAR inputs
 EOF
@@ -57,6 +60,7 @@ ont_minqual_override=
 use_porechop_override=
 genome_size_override=
 exclude_samples_override=
+padloc_override=
 
 positionals=()
 while [[ $# -gt 0 ]]; do
@@ -100,6 +104,14 @@ while [[ $# -gt 0 ]]; do
     --exclude-samples)
       exclude_samples_override=$2
       shift 2
+      ;;
+    --padloc)
+      padloc_override=1
+      shift
+      ;;
+    --no-padloc)
+      padloc_override=0
+      shift
       ;;
     --is-agar-project)
       is_agar_project_override=$2
@@ -237,6 +249,16 @@ batch_size=${4:-${BATCH_SIZE_DEFAULT:-50}}
 cmd=("$project_root/scripts/submit_workbench_pipeline.sh" --config "$site_config")
 if [[ $dry_run == 1 ]]; then
   cmd+=(--dry-run)
+fi
+# Forwarded as a flag rather than an exported RUN_PADLOC so it still wins when the
+# site config assigns RUN_PADLOC directly (submit_workbench_pipeline.sh sources
+# that config itself, after its own option parsing).
+if [[ -n $padloc_override ]]; then
+  if [[ $padloc_override == 1 ]]; then
+    cmd+=(--padloc)
+  else
+    cmd+=(--no-padloc)
+  fi
 fi
 cmd+=("$1" "$2" "$3" "$batch_size")
 

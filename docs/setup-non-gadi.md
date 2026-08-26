@@ -192,13 +192,18 @@ command shape, options, metadata sheet, FOFN, outputs — is identical to the ma
 ### Firefly example
 
 Firefly has `nextflow`, `singularity`, and `R` on PATH but no modulefiles, and a
-`bactopia-3.2.0` conda env. So:
+`bactopia-3.2.0` conda env. It also has PADLOC already installed at
+`/opt/conda/envs/padloc_2.0.0`, with PADLOC-DB v2.0.0 in that env's own `data/`
+directory — so enabling PADLOC there is just `PADLOC_ENV=/opt/conda/envs/padloc_2.0.0`
+in the site config plus `--padloc` (leave `PADLOC_DB` blank; padloc defaults to
+`<install>/../data`). So:
 
 ```bash
 conda activate bactopia-3.2.0
 cp config/sites/local.env.example config/sites/local.local.env
 # edit BACTOPIA_PIPELINE / DATASETS_CACHE / KRAKEN2_DB / MINIFORGE_ROOT / MLST_ENV / SING_CACHE
-./bin/bactopia-workbench submit local --site-config config/sites/local.local.env --dry-run \
+# and, for PADLOC, uncomment PADLOC_ENV=/opt/conda/envs/padloc_2.0.0
+./bin/bactopia-workbench submit local --site-config config/sites/local.local.env --dry-run --padloc \
   ~/bactopia-trial-runs/raw ~/bactopia-trial-runs/metadata ~/bactopia-trial-runs/results 2
 ```
 
