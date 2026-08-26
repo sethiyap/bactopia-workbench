@@ -52,6 +52,17 @@ These are not bundled in the repo and must exist on the execution site.
     install); on Gadi it is pre-staged (see
     [setup-non-gadi.md](setup-non-gadi.md#getting-the-fimtyper-container)). Built from
     `containers/fimtyper/Dockerfile` via `.github/workflows/build-fimtyper.yml`.
+- PADLOC (opt-in; `RUN_PADLOC=1` / `--padloc`):
+  - a padloc install — `PADLOC_ENV` (conda env prefix, preferred), `PADLOC_BIN`,
+    or `PADLOC_CONTAINER`. Nothing is auto-pulled: PADLOC is not a Bactopia
+    v3.2.0 bactopia-tool, so it runs as a standalone per-batch stage.
+  - PADLOC-DB (~1 GB) — `PADLOC_DB`, or the install's own `<install>/../data`
+    when `PADLOC_DB` is blank. Must be the **compiled** database
+    (`hmm/padlocdb.hmm`). See
+    [bactopia-setup.md](bactopia-setup.md#4b-padloc-db-optional).
+  - padloc itself shells out to `prodigal`, `hmmsearch` and `Rscript`; the
+    bioconda package and biocontainer bundle all three, and `PADLOC_ENV/bin` is
+    put on `PATH` for the stage.
 - Singularity cache and, if pre-pulled, container images:
   - `SING_CACHE`
   - optional `MLST_CONTAINER`

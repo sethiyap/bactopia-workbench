@@ -229,6 +229,73 @@ the indexes are versioned by date. Then set `KRAKEN2_DB` in your site config.
 To skip kraken2/bracken entirely instead, leave them out of the tools bundle
 (they only run when `--additional-tools yes` / the tool list includes them).
 
+## 4b. PADLOC-DB (optional)
+
+Only needed when `RUN_PADLOC=1` / `--padloc`. PADLOC is not a Bactopia v3.2.0
+bactopia-tool, so nothing about it is auto-pulled: you provide both a padloc
+install and PADLOC-DB.
+
+### Find it if it already exists
+
+A usable PADLOC-DB is a directory containing the **compiled** HMM file
+`hmm/padlocdb.hmm` (plus `sys/`, `hmm_meta.txt`, `sys_meta.txt`). An
+un-compiled checkout — 5,000+ individual `hmm/PDLC*.hmm` files — will **not**
+work; padloc reads the single concatenated file.
+
+```bash
+ls -lh "$PADLOC_DB"/hmm/padlocdb.hmm
+# a conda install keeps its own copy at <env>/data:
+ls -lh /opt/conda/envs/padloc_2.0.0/data/hmm/padlocdb.hmm
+```
+
+On the shared **firefly** install both already exist:
+`PADLOC_ENV=/opt/conda/envs/padloc_2.0.0`, whose `data/` holds PADLOC-DB v2.0.0
+(~950 MB, world-readable). Leave `PADLOC_DB` blank there — padloc defaults to
+`<install>/../data`, which is exactly that directory. Read-only is fine: PADLOC
+only reads the database and writes to its `--outdir`.
+
+### Install it if not present (needs internet)
+
+```bash
+padloc --data /path/to/padloc-db --db-update
+```
+
+`--data` **must come before** `--db-update`: padloc parses its options in order
+and `--db-update` exits as soon as it is seen, before `--data` is read.
+
+This downloads from GitHub, so run it somewhere with internet — a local/firefly
+host, or a Gadi **login** node (Gadi compute nodes have no internet, so it cannot
+run inside the job). Then point `PADLOC_DB` at the result.
+
+> ⚠️ `--db-install` / `--db-update` run `rm -rf` on the data directory before
+> extracting. Never point `--data` at a directory holding anything else.
+
+### Fully offline install
+
+Fetch the release tarball elsewhere, copy it over, then replicate padloc's own
+"compile" step (concatenating the per-model files):
+
+```bash
+mkdir -p "$PADLOC_DB"
+curl -L https://github.com/padlocbio/padloc-db/archive/refs/tags/v2.0.0.tar.gz \
+  | tar xz --strip-components 1 -C "$PADLOC_DB"
+
+cat "$PADLOC_DB"/hmm/*.hmm > "$PADLOC_DB"/hmm/padlocdb.hmm
+find "$PADLOC_DB"/hmm -maxdepth 1 -name '*.hmm' ! -name padlocdb.hmm -delete
+cat "$PADLOC_DB"/cm/*.cm > "$PADLOC_DB"/cm/padlocdb.cm
+find "$PADLOC_DB"/cm -maxdepth 1 -name '*.cm' ! -name padlocdb.cm -delete
+```
+
+~139 MB compressed, ~960 MB unpacked. PADLOC v2.x requires PADLOC-DB v2.x.
+
+### Container caveat
+
+`PADLOC_CONTAINER` works but is the awkward path: padloc runs
+`mkdir -p <install>/../data` at startup — before it parses `--data`, under
+`set -o errexit` — so on a read-only image it can die before `--data` matters. The
+stage therefore runs the image with `--writable-tmpfs`. If your site disallows
+that, use `PADLOC_ENV` or `PADLOC_BIN` instead.
+
 ## 5. Kleborate
 
 You do **not** install Kleborate separately. It runs inside Bactopia's container

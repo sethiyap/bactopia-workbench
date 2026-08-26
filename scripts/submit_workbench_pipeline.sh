@@ -95,6 +95,22 @@ Environment variables:
                          `st131typer_summary` sheet into that existing workbook
   USE_EXISTING_ST131_TYPER Default: 0. Set to 1 to reuse an existing
                          ST131_TYPER_OUTPUT_DIR during workbook export
+  RUN_PADLOC             Default: 0 (--padloc / --no-padloc override it). PADLOC
+                         finds antiviral/anti-phage defence systems. It is not a
+                         Bactopia v3.2.0 tool, so it runs as a standalone stage on
+                         each batch's assemblies, in parallel with the tool jobs.
+                         Adds padloc_n_systems / padloc_systems / padloc_n_genes to
+                         the mapped sheet plus a per-gene workbook sheet.
+  PADLOC_ENV             conda env prefix providing bin/padloc, for example
+                         /opt/conda/envs/padloc_2.0.0
+  PADLOC_BIN             Explicit path to the padloc executable
+  PADLOC_CONTAINER       Singularity/Apptainer image; requires PADLOC_DB
+  PADLOC_DB              PADLOC-DB directory. Leave empty to use the install's own
+                         data dir (correct for a conda env that has already had
+                         `padloc --db-update` run into it)
+  PADLOC_CPUS            Default: 8. CPUs passed to padloc --cpu per sample
+  PADLOC_KEEP_INTERMEDIATES Default: 0. Set to 1 to keep PADLOC's HMMER domain
+                         tables and Prodigal predictions alongside the results
   RUN_EXPORT_RESULTS_WORKBOOK Default: 1. Set to 0 to skip final Excel workbook export
   CHECK_INODE_QUOTA      Default: 1. Set to 0 to skip the inode preflight check
   INODE_FS_WARN_FREE_PCT Default: 15. Warn if df reports less free inode percent
@@ -142,6 +158,7 @@ ont_minqual_override=
 use_porechop_override=
 genome_size_override=
 exclude_samples_override=
+padloc_override=
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -189,6 +206,14 @@ while [[ $# -gt 0 ]]; do
     --exclude-samples)
       exclude_samples_override=$2
       shift 2
+      ;;
+    --padloc)
+      padloc_override=1
+      shift
+      ;;
+    --no-padloc)
+      padloc_override=0
+      shift
       ;;
     --help|-h)
       usage
@@ -305,6 +330,14 @@ run_mlst_review=${RUN_MLST_REVIEW:-1}
 run_post_review_map=${RUN_POST_REVIEW_MAP:-0}
 run_collect_assemblies=${RUN_COLLECT_ASSEMBLIES:-1}
 run_st131typer=${RUN_ST131_TYPER:-1}
+# PADLOC is off unless asked for: it needs an install and a ~1 GB PADLOC-DB that
+# this repo does not provision. --padloc / --no-padloc override the config value.
+run_padloc=${RUN_PADLOC:-0}
+if [[ -n $padloc_override ]]; then
+  run_padloc=$padloc_override
+fi
+padloc_pbs_script=${PADLOC_PBS_SCRIPT:-$script_dir/run_padloc_batch.pbs}
+merge_padloc_script=${MERGE_PADLOC_SCRIPT:-$script_dir/merge_padloc_summary.sh}
 st131_append_after_workbook=${ST131_APPEND_AFTER_WORKBOOK:-0}
 use_existing_st131typer=${USE_EXISTING_ST131_TYPER:-0}
 run_export_results_workbook=${RUN_EXPORT_RESULTS_WORKBOOK:-1}
@@ -716,6 +749,61 @@ run_dry_run_validation() {
 
   if [[ $run_kleborate != 0 ]]; then
     dry_run_check_file "KLEBORATE_COMPAT_SCRIPT" "$KLEBORATE_COMPAT_SCRIPT"
+  fi
+
+  if [[ ${run_padloc:-0} != 0 ]]; then
+    dry_run_check_file "run_padloc_batch.pbs/slurm wrapper" "$(scheduler_resolve_script "$padloc_pbs_script")"
+    dry_run_check_file "MERGE_PADLOC_SCRIPT" "$merge_padloc_script"
+
+    # Resolve padloc the same way run_padloc_batch.pbs does, first match wins.
+    local padloc_exe=""
+    if [[ -n ${PADLOC_BIN:-} ]]; then
+      padloc_exe=$PADLOC_BIN
+    elif [[ -n ${PADLOC_ENV:-} ]]; then
+      padloc_exe=${PADLOC_ENV}/bin/padloc
+    elif command -v padloc >/dev/null 2>&1; then
+      padloc_exe=$(command -v padloc)
+    fi
+
+    if [[ -n $padloc_exe ]]; then
+      if [[ -x $padloc_exe ]]; then
+        dry_run_pass "padloc executable found: $padloc_exe"
+      else
+        dry_run_fail "padloc executable not found or not executable: $padloc_exe"
+      fi
+    elif [[ -n ${PADLOC_CONTAINER:-} ]]; then
+      case "$PADLOC_CONTAINER" in
+        *://*) dry_run_pass "PADLOC_CONTAINER is a registry URI: $PADLOC_CONTAINER" ;;
+        *) dry_run_check_file "PADLOC_CONTAINER" "$PADLOC_CONTAINER" ;;
+      esac
+      if [[ -z ${PADLOC_DB:-} ]]; then
+        dry_run_fail "PADLOC_CONTAINER requires PADLOC_DB: the image ships no PADLOC-DB."
+      fi
+    else
+      dry_run_fail "RUN_PADLOC=1 but no PADLOC install is configured. Set PADLOC_ENV (conda env prefix), PADLOC_BIN, or PADLOC_CONTAINER, or use --no-padloc."
+    fi
+
+    # An empty PADLOC_DB means "use the install's own data dir", which is correct
+    # for a conda env that has had `padloc --db-update` run into it. When it is set,
+    # the compiled HMM file is the thing padloc actually reads at run time -- an
+    # un-compiled PADLOC-DB checkout (5,000 individual .hmm files) will not work.
+    if [[ -n ${PADLOC_DB:-} ]]; then
+      if [[ -f ${PADLOC_DB}/hmm/padlocdb.hmm ]]; then
+        dry_run_pass "PADLOC-DB found: ${PADLOC_DB}/hmm/padlocdb.hmm"
+      elif [[ -d ${PADLOC_DB} ]]; then
+        dry_run_fail "PADLOC_DB exists but has no compiled hmm/padlocdb.hmm: $PADLOC_DB. Install it with 'padloc --data $PADLOC_DB --db-update' (note: --data must come first), or see docs/bactopia-setup.md for the offline recipe."
+      else
+        dry_run_fail "PADLOC_DB not found: $PADLOC_DB"
+      fi
+    elif [[ -n $padloc_exe && -x $padloc_exe ]]; then
+      local padloc_default_db
+      padloc_default_db="$(cd "$(dirname "$padloc_exe")/../data" 2>/dev/null && pwd || true)"
+      if [[ -n $padloc_default_db && -f ${padloc_default_db}/hmm/padlocdb.hmm ]]; then
+        dry_run_pass "PADLOC-DB found in the install's default data dir: ${padloc_default_db}/hmm/padlocdb.hmm"
+      else
+        dry_run_fail "No PADLOC-DB in the install's default data dir and PADLOC_DB is unset. Run 'padloc --db-update', or point PADLOC_DB at a pre-staged PADLOC-DB."
+      fi
+    fi
   fi
 
   if [[ $run_fimtyper != 0 ]]; then
@@ -1374,6 +1462,14 @@ export ST131_TYPER_SCRIPT="$st131typer_script"
 export ST131_TYPER_DIR=${st131typer_dir:-}
 export ASSEMBLIES_OUTDIR="$assemblies_outdir"
 export ST131_TYPER_OUTPUT_DIR="$st131typer_output_dir"
+export RUN_PADLOC="$run_padloc"
+export PADLOC_ENV=${PADLOC_ENV:-}
+export PADLOC_BIN=${PADLOC_BIN:-}
+export PADLOC_CONTAINER=${PADLOC_CONTAINER:-}
+export PADLOC_DB=${PADLOC_DB:-}
+export PADLOC_CPUS=${PADLOC_CPUS:-8}
+export PADLOC_KEEP_INTERMEDIATES=${PADLOC_KEEP_INTERMEDIATES:-0}
+export MERGE_PADLOC_SCRIPT="$merge_padloc_script"
 if [[ -n $st131typer_input_dir ]]; then
   export ST131_TYPER_INPUT_DIR="$st131typer_input_dir"
 fi

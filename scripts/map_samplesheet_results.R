@@ -17,6 +17,7 @@ usage <- function() {
     "  --abritamr <file>\n",
     "  --plasmidfinder <file>\n",
     "  --bracken <file>\n",
+    "  --padloc <file>\n",
     "\n",
     "Notes:\n",
     "  - Metadata headers 'Sample name' and 'Comments' are preferred.\n",
@@ -61,6 +62,7 @@ fimtyper_file <- opts[["fimtyper"]]
 abritamr_file <- opts[["abritamr"]]
 plasmidfinder_file <- opts[["plasmidfinder"]]
 bracken_file <- opts[["bracken"]]
+padloc_file <- opts[["padloc"]]
 
 if (is.null(agrf_sheet) || !file.exists(agrf_sheet)) {
   stop("`--agrf-sheet` must point to an existing metadata samplesheet.", call. = FALSE)
@@ -908,6 +910,12 @@ if (is.null(plasmidfinder_file)) {
 if (is.null(bracken_file)) {
   bracken_file <- find_tool_merged_file(consolidated_dir, "bracken")
 }
+# PADLOC's per-sample summary. The per-gene table lives under results_padloc_genes/
+# and is deliberately NOT joined here -- it has many rows per sample and is
+# exported as its own workbook sheet instead.
+if (is.null(padloc_file)) {
+  padloc_file <- find_tool_merged_file(consolidated_dir, "padloc")
+}
 
 message_path("MLST file", mlst_file)
 message_path("Kleborate file", kleborate_file)
@@ -915,6 +923,7 @@ message_path("FimTyper file", fimtyper_file)
 message_path("abritAMR file", abritamr_file)
 message_path("PlasmidFinder file", plasmidfinder_file)
 message_path("Bracken file", bracken_file)
+message_path("PADLOC file", padloc_file)
 
 mlst <- dedupe_by_sample(read_mlst_table(mlst_file))
 kleborate <- dedupe_by_sample(read_kleborate_table(kleborate_file))
@@ -922,7 +931,8 @@ fimtyper <- dedupe_by_sample(read_fimtyper_table(fimtyper_file))
 abritamr <- dedupe_by_sample(read_generic_tool_table(abritamr_file, "abritamr_"))
 plasmidfinder <- dedupe_by_sample(read_generic_tool_table(plasmidfinder_file, "plasmidfinder_"))
 bracken <- dedupe_by_sample(read_bracken_table(bracken_file))
-result_samples <- collect_result_samples(mlst, kleborate, fimtyper, abritamr, plasmidfinder, bracken)
+padloc <- dedupe_by_sample(read_generic_tool_table(padloc_file, "padloc_"))
+result_samples <- collect_result_samples(mlst, kleborate, fimtyper, abritamr, plasmidfinder, bracken, padloc)
 
 if (is.null(result_samples) || !nrow(result_samples)) {
   stop(
@@ -978,6 +988,7 @@ merged <- left_join_base(merged, fimtyper, by = "sample")
 merged <- left_join_base(merged, abritamr, by = "sample")
 merged <- left_join_base(merged, plasmidfinder, by = "sample")
 merged <- left_join_base(merged, bracken, by = "sample")
+merged <- left_join_base(merged, padloc, by = "sample")
 merged <- left_join_base(merged, find_coverage_summary(consolidated_dir), by = "sample")
 merged <- flag_review_columns(merged)
 
@@ -1014,7 +1025,10 @@ preferred_order <- c(
   "bracken_primary_species_abundance",
   "bracken_secondary_species",
   "bracken_secondary_species_abundance",
-  "bracken_unclassified_abundance"
+  "bracken_unclassified_abundance",
+  "padloc_n_systems",
+  "padloc_systems",
+  "padloc_n_genes"
 )
 
 # Review/QC columns always sit at the very end of the sheet, after every tool
@@ -1048,7 +1062,8 @@ tool_prefix_order <- c(
   "fimtyper_",
   "abritamr_",
   "plasmidfinder_",
-  "bracken_"
+  "bracken_",
+  "padloc_"
 )
 col_tool_rank <- function(col) {
   hit <- which(vapply(tool_prefix_order, function(p) startsWith(col, p), logical(1)))

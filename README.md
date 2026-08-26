@@ -607,8 +607,9 @@ Because there are no reads with assembly input:
   has no reads; skipping bracken …`). `mykrobe` needs reads too, and `ismapper`
   needs Illumina reads — both are skipped as well.
 - **Assembly-based tools all work**: `mlst`, `checkm`, `abritamr`, `amrfinderplus`,
-  `plasmidfinder`, plus `kleborate`, `fimtyper`, ST131Typer, and (with
-  `--additional-tools yes`) `mobsuite`, `phispy`, `ectyper`, `shiga*`, `defensefinder`.
+  `plasmidfinder`, plus `kleborate`, `fimtyper`, ST131Typer, PADLOC (with
+  `--padloc`), and (with `--additional-tools yes`) `mobsuite`, `phispy`, `ectyper`,
+  `shiga*`, `defensefinder`.
 
 A complete local example (controls excluded; FimTyper + ST131Typer run by default):
 
@@ -703,6 +704,16 @@ ST131Typer need a one-time setup (a container / a clone); if it's missing, the r
 **skips them with a warning** rather than failing. Set `RUN_FIMTYPER=0` /
 `RUN_ST131_TYPER=0` to turn either off.
 
+**PADLOC** (`RUN_PADLOC=0`, antiviral / anti-phage defence systems) is **off by
+default**. It is not a Bactopia v3.2.0 bactopia-tool, so it cannot be added to
+`TOOLS_STRING`; like FimTyper it runs as its own per-batch stage over the
+assemblies. Turn it on with `--padloc` (or `RUN_PADLOC=1` in the site config) once
+`PADLOC_ENV` / `PADLOC_BIN` / `PADLOC_CONTAINER` points at an install — see
+[PADLOC](#padloc-anti-phage-defence-systems). If PADLOC is requested but no install
+can be reached, the run **skips it with a warning** rather than failing. Note the
+overlap with `defensefinder` in the additional-tools bundle below: both call
+anti-phage defence systems, from different model sets.
+
 **Additional tools** — opt-in bundle (`RUN_ADDITIONAL_TOOLS=0`,
 `ADDITIONAL_TOOLS_STRING`), enabled with `--additional-tools yes`:
 
@@ -729,6 +740,181 @@ defaults, e.g. `DEFAULT_TOOLS_STRING="mlst amrfinderplus abritamr plasmidfinder 
   /path/to/results \
   50
 ```
+
+### PADLOC (anti-phage defence systems)
+
+PADLOC locates antiviral / anti-phage defence systems in prokaryotic genomes. It is
+**not** part of Bactopia v3.2.0, so the workbench runs it itself, as a per-batch
+stage over that batch's assemblies (in parallel with the tool and Kleborate jobs).
+It is **off by default** and needs two things you provide: a PADLOC install and
+PADLOC-DB (~1 GB).
+
+**1. Point the workbench at a padloc install** (first match wins):
+
+| Variable | Use |
+|----------|-----|
+| `PADLOC_ENV` | conda env prefix, e.g. `/opt/conda/envs/padloc_2.0.0` — **preferred** |
+| `PADLOC_BIN` | explicit path to the `padloc` executable |
+| `PADLOC_CONTAINER` | Singularity/Apptainer image; **requires** `PADLOC_DB` |
+
+With `PADLOC_ENV`, the env's `bin/` is put on `PATH` for the stage, because padloc
+shells out to `prodigal`, `hmmsearch` and `Rscript` by bare name. If you need to
+create the env yourself:
+
+```bash
+conda create -n padloc -c conda-forge -c bioconda -c padlocbio padloc=2.0.0
+```
+
+**2. Provide PADLOC-DB.** Leave `PADLOC_DB` blank to use padloc's own default,
+`<install>/../data` — correct for a conda env that has already had the database
+installed into it. Otherwise install it once:
+
+```bash
+padloc --data /path/to/padloc-db --db-update    # --data MUST come before --db-update
+```
+
+`--db-update` downloads from GitHub, so it needs internet **on the machine that runs
+it**. That is fine on a local/firefly host and on a Gadi *login* node, but not
+inside a Gadi compute job — install it once, then point `PADLOC_DB` at it. On Gadi,
+follow [First-time PADLOC setup on Gadi](#first-time-padloc-setup-on-gadi) below.
+For a fully offline host, see
+[docs/bactopia-setup.md](docs/bactopia-setup.md#4b-padloc-db-optional).
+
+> ⚠️ `padloc --db-install` deletes its data directory (`rm -rf`) before extracting.
+> Never point `--data` at a directory holding anything else.
+
+**3. Run it:**
+
+```bash
+./bin/bactopia-workbench submit local \
+  --site-config config/sites/local.local.env \
+  --padloc \
+  /path/to/raw_fastqs \
+  /path/to/metadata \
+  /path/to/results \
+  50
+```
+
+Use `--no-padloc` to skip it for one run when your site config sets `RUN_PADLOC=1`.
+`--dry-run` validates the install and that `PADLOC_DB/hmm/padlocdb.hmm` (the
+compiled HMM file padloc actually reads) exists before anything is submitted.
+
+**What you get:**
+
+- three columns on the main mapped sheet — `padloc_n_systems` (distinct defence
+  system instances), `padloc_systems` (`;`-joined unique system names),
+  `padloc_n_genes` (defence-system gene hits)
+- a `tool_results_padloc_genes_merge` sheet with one row per gene hit, carrying
+  PADLOC's full output columns
+- per-sample `*_padloc.csv` / `*_padloc.gff` under
+  `<batch>_padloc/results_padloc/per_sample/`, plus `padloc_status.tsv` recording
+  which samples PADLOC failed on (an assembly under 100 kbp makes padloc exit
+  non-zero; that sample is recorded and the batch continues). Set
+  `PADLOC_KEEP_INTERMEDIATES=1` to also keep the HMMER domain tables and Prodigal
+  predictions.
+
+#### First-time PADLOC setup on Gadi
+
+Do this **once per project**, on a **login node** — Gadi compute nodes have no
+internet, so neither the conda install nor `padloc --db-update` can run inside a
+job. Everything goes on `/g/data` (not `/scratch`, which is purged), next to the
+other shared envs. Substitute your project code for `rg42`.
+
+```bash
+PROJECT=rg42
+DATASETS=/g/data/${PROJECT}/bactopia_datasets       # same root as miniforge3/ and envs/
+```
+
+**1. Create the padloc conda env** using the shared Miniforge (`MINIFORGE_ROOT`,
+the same one behind `MLST_ENV`):
+
+```bash
+source ${DATASETS}/miniforge3/etc/profile.d/conda.sh
+
+conda create -y -p ${DATASETS}/envs/padloc_env \
+  -c conda-forge -c bioconda -c padlocbio \
+  padloc=2.0.0
+```
+
+This pulls padloc's dependencies with it — HMMER 3.3.2, Prodigal 2.6.3, and
+R 4.3.1 with tidyverse/yaml/getopt. It is a **large env (tens of thousands of
+small files)**; if your project is near its `/g/data` inode quota, check first
+with `nci_account -P ${PROJECT}` — the workbench's own inode preflight only
+guards `RESULTS_ROOT`, not this install.
+
+Verify padloc can see its dependencies:
+
+```bash
+conda activate ${DATASETS}/envs/padloc_env
+padloc --check-deps
+```
+
+**2. Install PADLOC-DB** into a shared location:
+
+```bash
+padloc --data ${DATASETS}/padloc-db --db-update
+```
+
+`--data` **must come before** `--db-update` — padloc parses options in order and
+`--db-update` exits the moment it is seen, before `--data` is read. The download is
+~139 MB and unpacks to ~960 MB. padloc then *compiles* it, concatenating 5,028
+individual HMM files into a single `hmm/padlocdb.hmm` and deleting the originals —
+so the finished database costs only a handful of inodes.
+
+Confirm it landed:
+
+```bash
+padloc --data ${DATASETS}/padloc-db --db-version    # -> padloc-db v2.0.0
+ls -lh ${DATASETS}/padloc-db/hmm/padlocdb.hmm
+```
+
+**3. Make it group-readable** if others in the project will use it (mirrors the
+`mlst_env` step in
+[docs/gadi-shared-install-checklist.md](docs/gadi-shared-install-checklist.md)):
+
+```bash
+chgrp -R ${PROJECT} ${DATASETS}/envs/padloc_env ${DATASETS}/padloc-db
+chmod -R g+rX       ${DATASETS}/envs/padloc_env ${DATASETS}/padloc-db
+```
+
+**4. Point your Gadi site config at it** — in `config/sites/gadi.local.env`:
+
+```bash
+PADLOC_ENV=/g/data/rg42/bactopia_datasets/envs/padloc_env
+PADLOC_DB=/g/data/rg42/bactopia_datasets/padloc-db
+# RUN_PADLOC=1        # optional: on for every run from this site
+```
+
+`PADLOC_DB` is set explicitly here because step 2 deliberately put the database
+*outside* the env, so it survives rebuilding or replacing the env and can be shared
+by several installs. (Leaving `PADLOC_DB` blank is also valid — padloc then uses
+`<env>/data`, i.e. `${DATASETS}/envs/padloc_env/data` — but only if you installed
+the database there by running `padloc --db-update` with no `--data`.)
+
+**5. Dry-run, then submit.** The dry run checks the executable and that the
+compiled `hmm/padlocdb.hmm` exists, before any job is queued:
+
+```bash
+./bin/bactopia-workbench submit gadi \
+  --site-config config/sites/gadi.local.env \
+  --dry-run --padloc \
+  /path/to/raw_fastqs /path/to/metadata /path/to/results 50
+```
+
+Expect:
+
+```
+DRY RUN PASS: padloc executable found: .../envs/padloc_env/bin/padloc
+DRY RUN PASS: PADLOC-DB found: .../padloc-db/hmm/padlocdb.hmm
+```
+
+Then drop `--dry-run` to submit. Each batch gets a `padloc_b<NN>` job that starts
+as soon as that batch's assemblies exist, and consolidation waits for it.
+
+> **Note on `--db-update` later.** Refreshing the database re-downloads from GitHub,
+> so it must again be run from a login node — never from inside a batch job. And
+> because `--db-install`/`--db-update` run `rm -rf` on the target first, keep
+> `${DATASETS}/padloc-db` for the database and nothing else.
 
 ### Force Non-AGAR Mode
 
@@ -990,7 +1176,8 @@ METADATA_DIR/
 Common metadata and review columns:
 
 - always expected from metadata: `Sample name`, `Comments`
-- common mapped result fields: MLST, Kleborate, FimTyper, abritAMR, PlasmidFinder, Bracken
+- common mapped result fields: MLST, Kleborate, FimTyper, abritAMR, PlasmidFinder,
+  Bracken, and (when `RUN_PADLOC=1`) PADLOC
 - coverage flag (at the end, when available): `coverage_x`, `low_coverage`
   (see [Genome Size And QC Gates](#genome-size-and-qc-gates))
 - common review fields: `review_required`, `review_reason`, `mlst_review_note`

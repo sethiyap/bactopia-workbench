@@ -12,6 +12,12 @@ Key stages (see `scripts/`):
 
 - `run_bactopia_batch.*` / `run_extra_bactopia_tools.*` — run Bactopia and extra
   typing tools per batch.
+- `run_padloc_batch.*` + `merge_padloc_summary.sh` — PADLOC (anti-phage defence
+  systems) per batch. PADLOC is **not** a Bactopia v3.2.0 bactopia-tool, so it
+  cannot go in `TOOLS_STRING`; it is a standalone stage in the FimTyper mould,
+  writing `results_padloc/merged-results/padloc_merged.tsv` (per sample, joined
+  onto the sheet) and `results_padloc_genes/merged-results/padloc_genes_merged.tsv`
+  (per gene hit, its own workbook sheet). Off by default (`RUN_PADLOC`).
 - `consolidate_bactopia_batches.R` — merge per-batch tool outputs into a
   consolidated directory (`tools/results_<tool>/merged-results/...`).
 - `map_samplesheet_results.R` — join consolidated tool tables onto the
@@ -30,7 +36,7 @@ The main ("mapped") sheet of the workbook is built by
 Python exporter:
 
 - Every tool's columns are namespaced with a tool prefix (`mlst_`, `kleborate_`,
-  `fimtyper_`, `abritamr_`, `plasmidfinder_`, `bracken_`) via
+  `fimtyper_`, `abritamr_`, `plasmidfinder_`, `bracken_`, `padloc_`) via
   `prefix_non_key_cols()`.
 - `preferred_order` lists the curated, tool-grouped column order used at the
   front of the sheet (metadata columns first, then each tool's block in order).
