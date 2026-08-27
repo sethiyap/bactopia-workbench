@@ -64,6 +64,11 @@ PADLOC_DB=${PADLOC_DB:-}
 PADLOC_CPUS=${PADLOC_CPUS:-${NCPUS:-${SLURM_CPUS_PER_TASK:-8}}}
 MERGE_PADLOC_SCRIPT=${MERGE_PADLOC_SCRIPT:-}
 
+# Retry budget for TRANSIENT container-engine failures only (see the run loop).
+# PADLOC_MAX_ATTEMPTS=1 disables retrying.
+PADLOC_MAX_ATTEMPTS=${PADLOC_MAX_ATTEMPTS:-3}
+PADLOC_RETRY_DELAY=${PADLOC_RETRY_DELAY:-30}
+
 # PADLOC's intermediates (HMMER domain tables and Prodigal predictions) are large
 # and reproducible; drop them by default and keep only *_padloc.csv / *_padloc.gff.
 PADLOC_KEEP_INTERMEDIATES=${PADLOC_KEEP_INTERMEDIATES:-0}
@@ -212,16 +217,50 @@ for assembly in "${assemblies[@]}"; do
   # Per-sample failures must not take down the batch: PADLOC exits non-zero for a
   # genome under 100 kbp ("Prodigal works best with sequences > 100kbp"), which is
   # a property of that assembly, not of the run. Record it and carry on.
-  if "${padloc_cmd[@]}" ${padloc_args[@]+"${padloc_args[@]}"} \
-      --fna "$fna" \
-      --outdir "$PADLOC_OUT" \
-      --cpu "$PADLOC_CPUS" \
-      >> "${WORK_ROOT}/padloc.${sample}.log" 2>&1; then
+  #
+  # Container engines can also fail transiently -- most often loop-device
+  # exhaustion ("failed to find loop device ... resource temporarily unavailable")
+  # when several images mount on one node at once. That is not a property of the
+  # sample, and without a retry it would be recorded as a PADLOC failure and
+  # quietly drop the sample from the results. Retry only that signature; a genuine
+  # PADLOC failure is deterministic and is recorded on the first attempt.
+  sample_log="${WORK_ROOT}/padloc.${sample}.log"
+  attempt_log="${WORK_ROOT}/.padloc.${sample}.attempt"
+  attempt=1
+  sample_status=failed
+
+  while true; do
+    if "${padloc_cmd[@]}" ${padloc_args[@]+"${padloc_args[@]}"} \
+        --fna "$fna" \
+        --outdir "$PADLOC_OUT" \
+        --cpu "$PADLOC_CPUS" \
+        > "$attempt_log" 2>&1; then
+      sample_status=ok
+    fi
+    cat "$attempt_log" >> "$sample_log"
+
+    if [[ "$sample_status" == "ok" ]]; then
+      break
+    fi
+
+    if [[ $attempt -lt $PADLOC_MAX_ATTEMPTS ]] &&
+       grep -qiE 'failed to find loop device|resource temporarily unavailable|container creation failed|loop device' "$attempt_log"; then
+      log "Transient container failure for ${sample} (attempt ${attempt}/${PADLOC_MAX_ATTEMPTS}); retrying in $((attempt * PADLOC_RETRY_DELAY))s"
+      sleep $((attempt * PADLOC_RETRY_DELAY))
+      attempt=$((attempt + 1))
+      continue
+    fi
+    break
+  done
+
+  rm -f "$attempt_log"
+
+  if [[ "$sample_status" == "ok" ]]; then
     printf '%s\tok\n' "$sample" >> "$status_file"
   else
     failed=$((failed + 1))
     printf '%s\tfailed\n' "$sample" >> "$status_file"
-    log "WARNING: PADLOC failed for ${sample}; see ${WORK_ROOT}/padloc.${sample}.log"
+    log "WARNING: PADLOC failed for ${sample}; see ${sample_log}"
   fi
 
   rm -f "$fna"
