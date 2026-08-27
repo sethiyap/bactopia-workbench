@@ -121,6 +121,15 @@ elif command -v padloc >/dev/null 2>&1; then
   padloc_cmd=(padloc)
   padloc_mode="padloc on PATH ($(command -v padloc))"
 elif [[ -n "$PADLOC_CONTAINER" ]]; then
+  # Scheduler jobs start from a bare environment, so the container engine is not on
+  # PATH until its module is loaded -- the same thing the Bactopia/FimTyper stages
+  # do. Kept inside this branch so a PADLOC_ENV/PADLOC_BIN setup is untouched, and
+  # tolerant of sites with no module system (USE_MODULES=0, or no `module` at all),
+  # where the engine is expected on PATH already.
+  if [[ "${USE_MODULES:-1}" == "1" ]] && type module >/dev/null 2>&1; then
+    module load singularity >/dev/null 2>&1 || module load apptainer >/dev/null 2>&1 || true
+  fi
+
   engine=""
   if command -v singularity >/dev/null 2>&1; then
     engine=singularity
