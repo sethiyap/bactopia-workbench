@@ -78,7 +78,8 @@ Environment variables:
   USE_PORECHOP           Optional 1 or 0 for ONT adapter removal
   RUN_CONSOLIDATE        Default: 1. Set to 0 in POSTPROCESS_ONLY mode to reuse
                          an existing consolidated directory
-  MAP_AGRF_RESULTS       Default: 1. Set to 0 to skip post-consolidation AGRF mapping
+  MAP_AGRF_RESULTS       Default: 1. Set to 0 to skip post-consolidation metadata
+                         mapping (the `metadata_mapping` job)
   RUN_MLST_REVIEW        Default: 1. Set to 0 to skip the standalone MLST review follow-up
   RUN_POST_REVIEW_MAP    Default: 0. Set to 1 only if you explicitly want a
                          second AGRF remap driven by mlst_review.tsv
@@ -1517,19 +1518,19 @@ review_tsv=${map_output%.tsv}_review_required.tsv
 review_mlst_file=${review_output_dir}/mlst_review.tsv
 
 if [[ $map_agrf_results == 1 && -z $consolidate_job_id && $postprocess_only != 1 && $run_consolidate == 1 ]]; then
-  log "WARN" "No consolidation job was detected, so AGRF mapping was not submitted."
+  log "WARN" "No consolidation job was detected, so metadata mapping was not submitted."
   exit 0
 elif [[ $map_agrf_results == 1 ]]; then
-  current_step="submitting AGRF mapping job"
+  current_step="submitting metadata mapping job"
   map_job_id=$(scheduler_submit \
-    "agrf_map_job" \
+    "metadata_mapping" \
     "$final_dependency_job" \
     "AGRF_SHEET=${agrf_sheet_path},CONSOLIDATED_DIR=${consolidated_outdir},MAP_OUTPUT=${map_output},MAP_SCRIPT=${map_r_script}" \
     "$map_pbs_script" \
     "${PBS_LOG_DIR:-}" \
     "${PBS_MAIL_OPTIONS:-}" \
     "${PBS_MAIL_USER:-}")
-  log "INFO" "AGRF mapping job ${map_job_id}: ${map_output}"
+  log "INFO" "Metadata mapping job ${map_job_id}: ${map_output}"
   final_dependency_job=$map_job_id
 elif [[ $run_mlst_review == 1 ]]; then
   if [[ ! -f $map_output || ! -f $review_tsv ]]; then
@@ -1551,16 +1552,16 @@ if [[ $run_mlst_review == 1 ]]; then
   final_dependency_job=$review_job_id
 
   if [[ $run_post_review_map == 1 ]]; then
-    current_step="submitting post-review AGRF mapping job"
+    current_step="submitting post-review metadata mapping job"
     post_review_map_job_id=$(scheduler_submit \
-      "agrf_post_review_map_job" \
+      "metadata_mapping_post_review" \
       "$review_job_id" \
       "AGRF_SHEET=${agrf_sheet_path},CONSOLIDATED_DIR=${consolidated_outdir},MAP_OUTPUT=${post_review_map_output},MAP_SCRIPT=${map_r_script},MLST_FILE=${review_mlst_file}" \
       "$map_pbs_script" \
       "${PBS_LOG_DIR:-}" \
       "${PBS_MAIL_OPTIONS:-}" \
       "${PBS_MAIL_USER:-}")
-    log "INFO" "Post-review AGRF mapping job ${post_review_map_job_id}: ${post_review_map_output}"
+    log "INFO" "Post-review metadata mapping job ${post_review_map_job_id}: ${post_review_map_output}"
     final_dependency_job=$post_review_map_job_id
   fi
 elif [[ $run_post_review_map == 1 ]]; then
@@ -1568,16 +1569,16 @@ elif [[ $run_post_review_map == 1 ]]; then
     fail "RUN_POST_REVIEW_MAP=1 without RUN_MLST_REVIEW requires an existing review file: $review_mlst_file"
   fi
 
-  current_step="submitting post-review AGRF mapping job"
+  current_step="submitting post-review metadata mapping job"
   post_review_map_job_id=$(scheduler_submit \
-    "agrf_post_review_map_job" \
+    "metadata_mapping_post_review" \
     "$final_dependency_job" \
     "AGRF_SHEET=${agrf_sheet_path},CONSOLIDATED_DIR=${consolidated_outdir},MAP_OUTPUT=${post_review_map_output},MAP_SCRIPT=${map_r_script},MLST_FILE=${review_mlst_file}" \
     "$map_pbs_script" \
     "${PBS_LOG_DIR:-}" \
     "${PBS_MAIL_OPTIONS:-}" \
     "${PBS_MAIL_USER:-}")
-  log "INFO" "Post-review AGRF mapping job ${post_review_map_job_id}: ${post_review_map_output}"
+  log "INFO" "Post-review metadata mapping job ${post_review_map_job_id}: ${post_review_map_output}"
   final_dependency_job=$post_review_map_job_id
 fi
 
