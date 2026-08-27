@@ -288,13 +288,32 @@ find "$PADLOC_DB"/cm -maxdepth 1 -name '*.cm' ! -name padlocdb.cm -delete
 
 ~139 MB compressed, ~960 MB unpacked. PADLOC v2.x requires PADLOC-DB v2.x.
 
-### Container caveat
+### Container route
 
-`PADLOC_CONTAINER` works but is the awkward path: padloc runs
-`mkdir -p <install>/../data` at startup — before it parses `--data`, under
-`set -o errexit` — so on a read-only image it can die before `--data` matters. The
-stage therefore runs the image with `--writable-tmpfs`. If your site disallows
-that, use `PADLOC_ENV` or `PADLOC_BIN` instead.
+On an inode-constrained filesystem the container is the better choice: **one
+`.sif`** instead of the 30,000–60,000 files a padloc conda env needs for R +
+tidyverse. Check `lquota`'s **inode** columns, not just space, before choosing.
+
+```bash
+singularity pull /path/to/padloc_2.0.0.sif \
+  docker://quay.io/biocontainers/padloc:2.0.0--hdfd78af_1
+```
+
+`PADLOC_DB` is **required** with `PADLOC_CONTAINER` — the image ships no database.
+Build it with the offline recipe above rather than through the image (see why
+below), then set both variables.
+
+Two padloc quirks the stage handles for you:
+
+- padloc runs `mkdir -p <install>/../data` at startup — before it parses `--data`,
+  under `set -o errexit` — so on a read-only image it would die before `--data`
+  mattered. The stage resolves padloc's location inside the image and bind-mounts
+  `PADLOC_DB` **onto** that data directory, so the path exists (making `mkdir -p` a
+  no-op success) and is simultaneously padloc's default database location. No
+  `--writable-tmpfs` or other workaround is needed.
+- That same bind is why you should **not** run `--db-update` through the image:
+  `--db-install` does `rm -rf` on its data directory first, which fails on a bind
+  mountpoint. Use the offline recipe, or a conda install, to build the database.
 
 ## 5. Kleborate
 

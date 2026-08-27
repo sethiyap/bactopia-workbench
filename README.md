@@ -815,41 +815,83 @@ compiled HMM file padloc actually reads) exists before anything is submitted.
 
 #### First-time PADLOC setup on Gadi
 
-Do this **once per project**, on a **login node** — Gadi compute nodes have no
-internet, so neither the conda install nor `padloc --db-update` can run inside a
-job. Everything goes on `/g/data` (not `/scratch`, which is purged), next to the
-other shared envs. Substitute your project code for `rg42`.
+Do this **once per project**. It needs internet, so run it from a **login node**
+or a **`copyq`** job — Gadi compute nodes have no internet, so neither the image
+pull nor `padloc --db-update` can run inside a normal batch job. Everything goes on
+`/g/data` (not `/scratch`, which is purged). Substitute your project code for
+`rg42`.
 
 ```bash
 PROJECT=rg42
 DATASETS=/g/data/${PROJECT}/bactopia_datasets       # same root as miniforge3/ and envs/
 ```
 
-**1. Create the padloc conda env** using the shared Miniforge (`MINIFORGE_ROOT`,
-the same one behind `MLST_ENV`):
+> **Use the container on Gadi.** Check your headroom first with `lquota` — and look
+> at the **inode** columns, not just space. A padloc conda env pulls in R 4.3.1 +
+> tidyverse: **30,000–60,000 files**, which will blow a typical `/g/data` inode
+> quota even with plenty of GiB free. The container is **one `.sif`**. Prefer the
+> conda route only on a host with inodes to spare (e.g. firefly, where padloc is
+> already installed).
+
+**1. Pull the padloc image** into your Singularity cache:
+
+```bash
+module load singularity
+singularity pull ${DATASETS}/padloc_2.0.0.sif \
+  docker://quay.io/biocontainers/padloc:2.0.0--hdfd78af_1
+```
+
+~700 MB, **one inode**. The image bundles padloc's dependencies — HMMER 3.3.2,
+Prodigal 2.6.3, and R 4.3.1 with tidyverse/yaml/getopt.
+
+<details>
+<summary>Alternative: a conda env instead of the container</summary>
+
+Only where inode quota allows (see the warning above):
 
 ```bash
 source ${DATASETS}/miniforge3/etc/profile.d/conda.sh
-
 conda create -y -p ${DATASETS}/envs/padloc_env \
-  -c conda-forge -c bioconda -c padlocbio \
-  padloc=2.0.0
+  -c conda-forge -c bioconda -c padlocbio padloc=2.0.0
+conda activate ${DATASETS}/envs/padloc_env
+padloc --check-deps          # every dependency should report "installed"
 ```
 
-This pulls padloc's dependencies with it — HMMER 3.3.2, Prodigal 2.6.3, and
-R 4.3.1 with tidyverse/yaml/getopt. It is a **large env (tens of thousands of
-small files)**; if your project is near its `/g/data` inode quota, check first
-with `nci_account -P ${PROJECT}` — the workbench's own inode preflight only
-guards `RESULTS_ROOT`, not this install.
+Then set `PADLOC_ENV=${DATASETS}/envs/padloc_env` in step 4 instead of
+`PADLOC_CONTAINER`. If conda's package cache lives under a tight quota, point it
+elsewhere first with `export CONDA_PKGS_DIRS=/scratch/${PROJECT}/$USER/conda_pkgs`.
 
-Verify padloc can see its dependencies:
+</details>
+
+**2. Install PADLOC-DB** into a shared location.
+
+With the **container** route, install it with plain shell rather than through the
+image — `--db-update` would hit the same read-only-`mkdir` problem, and its
+`rm -rf`-then-recreate step fails on a bind mountpoint. This is padloc's own
+download-and-compile sequence, done by hand:
 
 ```bash
-conda activate ${DATASETS}/envs/padloc_env
-padloc --check-deps
+mkdir -p ${DATASETS}/padloc-db
+curl -L https://github.com/padlocbio/padloc-db/archive/refs/tags/v2.0.0.tar.gz \
+  | tar xz --strip-components 1 -C ${DATASETS}/padloc-db
+
+cat ${DATASETS}/padloc-db/hmm/*.hmm > ${DATASETS}/padloc-db/hmm/padlocdb.hmm
+find ${DATASETS}/padloc-db/hmm -maxdepth 1 -name '*.hmm' ! -name padlocdb.hmm -delete
+cat ${DATASETS}/padloc-db/cm/*.cm > ${DATASETS}/padloc-db/cm/padlocdb.cm
+find ${DATASETS}/padloc-db/cm -maxdepth 1 -name '*.cm' ! -name padlocdb.cm -delete
 ```
 
-**2. Install PADLOC-DB** into a shared location:
+> **Inode note:** the tarball briefly unpacks **5,028 individual HMM files** before
+> the `cat`/`find` pair collapses them into one. The finished database is ~960 MB in
+> **under 400 files**, but you need that transient headroom while it runs — check
+> `lquota` first. If it's tight, do this on `/scratch` and move the compiled
+> directory to `/g/data` afterwards.
+
+With the **conda** route you can instead let padloc do it:
+
+```bash
+padloc --data ${DATASETS}/padloc-db --db-update
+```
 
 ```bash
 padloc --data ${DATASETS}/padloc-db --db-update
@@ -873,23 +915,26 @@ ls -lh ${DATASETS}/padloc-db/hmm/padlocdb.hmm
 [docs/gadi-shared-install-checklist.md](docs/gadi-shared-install-checklist.md)):
 
 ```bash
-chgrp -R ${PROJECT} ${DATASETS}/envs/padloc_env ${DATASETS}/padloc-db
-chmod -R g+rX       ${DATASETS}/envs/padloc_env ${DATASETS}/padloc-db
+chgrp -R ${PROJECT} ${DATASETS}/padloc_2.0.0.sif ${DATASETS}/padloc-db
+chmod -R g+rX       ${DATASETS}/padloc_2.0.0.sif ${DATASETS}/padloc-db
 ```
 
 **4. Point your Gadi site config at it** — in `config/sites/gadi.local.env`:
 
 ```bash
-PADLOC_ENV=/g/data/rg42/bactopia_datasets/envs/padloc_env
+PADLOC_CONTAINER=/g/data/rg42/bactopia_datasets/padloc_2.0.0.sif
 PADLOC_DB=/g/data/rg42/bactopia_datasets/padloc-db
 # RUN_PADLOC=1        # optional: on for every run from this site
 ```
 
-`PADLOC_DB` is set explicitly here because step 2 deliberately put the database
-*outside* the env, so it survives rebuilding or replacing the env and can be shared
-by several installs. (Leaving `PADLOC_DB` blank is also valid — padloc then uses
-`<env>/data`, i.e. `${DATASETS}/envs/padloc_env/data` — but only if you installed
-the database there by running `padloc --db-update` with no `--data`.)
+`PADLOC_DB` is **required** with the container route — the image ships no database.
+The stage mounts it onto padloc's own in-image data directory, which is both where
+padloc looks by default and what makes its start-up `mkdir` succeed on a read-only
+image; you do not need `--writable-tmpfs` or any other workaround.
+
+(Conda route instead: set `PADLOC_ENV=/g/data/rg42/bactopia_datasets/envs/padloc_env`
+in place of `PADLOC_CONTAINER`. `PADLOC_DB` may then be left blank if you installed
+the database into the env's own `data/` dir.)
 
 **5. Dry-run, then submit.** The dry run checks the executable and that the
 compiled `hmm/padlocdb.hmm` exists, before any job is queued:
@@ -904,15 +949,15 @@ compiled `hmm/padlocdb.hmm` exists, before any job is queued:
 Expect:
 
 ```
-DRY RUN PASS: padloc executable found: .../envs/padloc_env/bin/padloc
+DRY RUN PASS: PADLOC_CONTAINER found: .../padloc_2.0.0.sif
 DRY RUN PASS: PADLOC-DB found: .../padloc-db/hmm/padlocdb.hmm
 ```
 
 Then drop `--dry-run` to submit. Each batch gets a `padloc_b<NN>` job that starts
 as soon as that batch's assemblies exist, and consolidation waits for it.
 
-> **Note on `--db-update` later.** Refreshing the database re-downloads from GitHub,
-> so it must again be run from a login node — never from inside a batch job. And
+> **Note on refreshing the database later.** It re-downloads from GitHub, so it must
+> again be run from a login node or `copyq` — never from inside a batch job. And
 > because `--db-install`/`--db-update` run `rm -rf` on the target first, keep
 > `${DATASETS}/padloc-db` for the database and nothing else.
 
