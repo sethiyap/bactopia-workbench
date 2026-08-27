@@ -833,12 +833,29 @@ DATASETS=/g/data/${PROJECT}/bactopia_datasets       # same root as miniforge3/ a
 > conda route only on a host with inodes to spare (e.g. firefly, where padloc is
 > already installed).
 
-**1. Pull the padloc image** into your Singularity cache:
+**1. Pull the padloc image.** Redirect Singularity's caches **first** — they
+default to `~/.singularity`, and Gadi's `/home` quota (~10 GB) is far too small for
+image blobs, so an un-redirected pull dies with `disk quota exceeded` even though
+`/g/data` has room:
 
 ```bash
 module load singularity
+export SINGULARITY_CACHEDIR=/scratch/${PROJECT}/$USER/singularity_cache   # = SING_CACHE
+export SINGULARITY_TMPDIR=/scratch/${PROJECT}/$USER/singularity_tmp
+mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
+
 singularity pull ${DATASETS}/padloc_2.0.0.sif \
   docker://quay.io/biocontainers/padloc:2.0.0--hdfd78af_1
+```
+
+Worth putting those two exports in your shell profile — every Nextflow image pull
+has the same failure mode. Add `--disable-cache` to the pull if the build still
+struggles for space.
+
+Check the image works before moving on:
+
+```bash
+singularity exec ${DATASETS}/padloc_2.0.0.sif padloc --version   # v2.0.0
 ```
 
 ~700 MB, **one inode**. The image bundles padloc's dependencies — HMMER 3.3.2,
@@ -893,22 +910,22 @@ With the **conda** route you can instead let padloc do it:
 padloc --data ${DATASETS}/padloc-db --db-update
 ```
 
-```bash
-padloc --data ${DATASETS}/padloc-db --db-update
-```
-
 `--data` **must come before** `--db-update` — padloc parses options in order and
-`--db-update` exits the moment it is seen, before `--data` is read. The download is
-~139 MB and unpacks to ~960 MB. padloc then *compiles* it, concatenating 5,028
-individual HMM files into a single `hmm/padlocdb.hmm` and deleting the originals —
-so the finished database costs only a handful of inodes.
+`--db-update` exits the moment it is seen, before `--data` is read.
 
-Confirm it landed:
+Either way, verify the result. For the container this reproduces exactly the bind
+the stage performs, so it validates the image and the database together:
 
 ```bash
-padloc --data ${DATASETS}/padloc-db --db-version    # -> padloc-db v2.0.0
+singularity exec -B ${DATASETS}/padloc-db:/usr/local/data \
+  ${DATASETS}/padloc_2.0.0.sif padloc --db-version      # padloc-db v2.0.0
 ls -lh ${DATASETS}/padloc-db/hmm/padlocdb.hmm
+find ${DATASETS}/padloc-db | wc -l                      # a few hundred, not thousands
 ```
+
+If the bind path ever needs checking against a different image, it is derived from
+`singularity exec <image> sh -c 'command -v padloc'` — `dirname` twice, then
+`/data`.
 
 **3. Make it group-readable** if others in the project will use it (mirrors the
 `mlst_env` step in
