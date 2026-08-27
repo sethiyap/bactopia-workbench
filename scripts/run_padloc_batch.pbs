@@ -132,12 +132,28 @@ elif [[ -n "$PADLOC_CONTAINER" ]]; then
   [[ -n "$PADLOC_DB" ]] || fail "PADLOC_CONTAINER requires PADLOC_DB (the image ships no database)."
   [[ -d "$PADLOC_DB" ]] || fail "PADLOC_DB not found: $PADLOC_DB"
   export SINGULARITY_CACHEDIR="$SING_CACHE"
-  # padloc runs `mkdir -p <install>/../data` at startup, before it parses --data,
-  # under `set -o errexit` -- on a read-only image that kills it before --data is
-  # ever read. --writable-tmpfs gives that mkdir somewhere to go. If your site
-  # disallows --writable-tmpfs, use PADLOC_ENV/PADLOC_BIN instead.
-  padloc_cmd=("$engine" exec --writable-tmpfs -B "$PADLOC_DB:/padloc-db" -B "$WORK_ROOT:$WORK_ROOT" "$PADLOC_CONTAINER" padloc)
-  PADLOC_DB=/padloc-db
+
+  # padloc runs `mkdir -p <install>/../data` at startup -- before it parses --data,
+  # and under `set -o errexit`. On a read-only image whose install has no data dir,
+  # that kills padloc before --data is ever read. So instead of fighting it, mount
+  # the staged PADLOC-DB *onto* that exact path: the directory then exists, mkdir -p
+  # is a no-op success even read-only, and it is also padloc's default DATA, so no
+  # workaround (and no --writable-tmpfs) is needed.
+  img_padloc=$("$engine" exec "$PADLOC_CONTAINER" sh -c 'command -v padloc' 2>/dev/null | tr -d '\r')
+  if [[ -z "$img_padloc" ]]; then
+    fail "Could not locate 'padloc' inside $PADLOC_CONTAINER. Check the image, or use PADLOC_ENV/PADLOC_BIN instead."
+  fi
+  # padloc derives DATA from $0, so mirror its own arithmetic: dirname($0)/../data.
+  img_data="$(dirname "$(dirname "$img_padloc")")/data"
+  log "Container padloc: $img_padloc (data dir: $img_data)"
+
+  padloc_cmd=("$engine" exec \
+    -B "${PADLOC_DB}:${img_data}" \
+    -B "${WORK_ROOT}:${WORK_ROOT}" \
+    "$PADLOC_CONTAINER" padloc)
+  # Passed explicitly as well as bound, so a failed bind surfaces as padloc's own
+  # "Valid data directory required" rather than a silent scan against nothing.
+  PADLOC_DB="$img_data"
   padloc_mode="PADLOC_CONTAINER=$PADLOC_CONTAINER"
 else
   fail "No PADLOC install found. Set PADLOC_ENV (conda env prefix), PADLOC_BIN, or PADLOC_CONTAINER."
