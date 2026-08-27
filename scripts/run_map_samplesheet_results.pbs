@@ -6,7 +6,7 @@
 #PBS -l mem=8GB
 #PBS -l jobfs=10GB
 #PBS -l storage=scratch/rg42+gdata/rg42
-#PBS -N agrf_map
+#PBS -N metadata_mapping
 #PBS -l wd
 
 set -euo pipefail
