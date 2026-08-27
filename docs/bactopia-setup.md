@@ -311,6 +311,13 @@ Two padloc quirks the stage handles for you:
   `PADLOC_DB` **onto** that data directory, so the path exists (making `mkdir -p` a
   no-op success) and is simultaneously padloc's default database location. No
   `--writable-tmpfs` or other workaround is needed.
+
+  Confirmed against `quay.io/biocontainers/padloc:2.0.0--hdfd78af_1`, which ships
+  no `/usr/local/data`: without the bind even `padloc --version` fails with
+  `mkdir: can't create directory '/usr/local/bin/../data': Read-only file system`;
+  with it, `padloc --db-version` reports the database normally. So do not smoke-test
+  such an image with a bare `padloc --version` — use
+  `singularity exec <image> sh -c 'command -v padloc'` instead.
 - That same bind is why you should **not** run `--db-update` through the image:
   `--db-install` does `rm -rf` on its data directory first, which fails on a bind
   mountpoint. Use the offline recipe, or a conda install, to build the database.

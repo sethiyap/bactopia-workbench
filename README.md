@@ -852,11 +852,18 @@ Worth putting those two exports in your shell profile — every Nextflow image p
 has the same failure mode. Add `--disable-cache` to the pull if the build still
 struggles for space.
 
-Check the image works before moving on:
+Check the image before moving on — but **not** with `padloc --version`. This image
+has no `data/` directory of its own, and padloc's start-up `mkdir` runs before it
+parses any option at all, so *every* invocation fails until the database is bound
+in (step 2):
 
 ```bash
-singularity exec ${DATASETS}/padloc_2.0.0.sif padloc --version   # v2.0.0
+singularity exec ${DATASETS}/padloc_2.0.0.sif sh -c 'command -v padloc'
+# -> /usr/local/bin/padloc
 ```
+
+That path is also what the stage uses to compute the bind target (`dirname` twice,
+then `/data` → `/usr/local/data`).
 
 ~700 MB, **one inode**. The image bundles padloc's dependencies — HMMER 3.3.2,
 Prodigal 2.6.3, and R 4.3.1 with tidyverse/yaml/getopt.
