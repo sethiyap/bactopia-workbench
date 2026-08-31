@@ -65,3 +65,48 @@ When adding a new tool or new per-tool columns:
 
 This keeps the exported workbook readable — one contiguous block of columns per
 tool — regardless of which optional columns a given run happens to emit.
+
+## Nextflow config convention: container environment goes in the `env` scope
+
+**Never set a container's environment from a `beforeScript`.** Nextflow's
+`nxf_launch` in `.command.run` is:
+
+```
+env - PATH="$PATH" ... singularity exec --no-home --pid ... <image> ...
+```
+
+`env -` wipes the environment before Singularity starts, so nothing a
+`beforeScript` exports survives — including `SINGULARITYENV_*`, because
+Singularity never sees those variables either. `PATH` is the single exception,
+forwarded explicitly by `nxf_launch`.
+
+Only the top-level `env { }` scope reaches the container: Nextflow emits it into
+`nxf_container_env()`, which is `eval`'d inside. That scope is global (there is
+no per-process `env`), so per-process container variables have to be either
+global `env` entries or handled inside the tool's own wrapper script.
+
+To check what a task actually got, read `nxf_container_env()` in a real
+`work/*/.command.run` — it lists every variable that crossed the boundary.
+
+Set in `env { }` in every site config (`scripts/nextflow.*.all_tools.config`):
+
+- `JAVA_TOOL_OPTIONS = '-XX:-UsePerfData'` — required. Every container runs with
+  `--pid`, so each task gets its own PID namespace and JVM PIDs restart low,
+  while the host `/tmp` is shared into all of them. Concurrent Java tools
+  (Prokka's `minced`, BBTools) collide on `/tmp/hsperfdata_$USER/<pid>` and the
+  loser prints a `[warning][perf,memops]` line **on stdout**. Prokka 1.14.6 reads
+  its minced version with `minced --version | sed -n '1p'` (no `2>&1`), parses
+  the warning as the version, and aborts the task. Not worth an upstream report:
+  Prokka 1.14.6 is pinned by Bactopia and effectively frozen. Applies to all
+  executors — Nextflow passes `--pid` regardless — but it is reliable on `local`
+  (all `maxForks` tasks share one `/tmp`) and intermittent on slurm/gadi (only
+  co-scheduled tasks on the same node).
+- `TERM = 'dumb'` — suppresses `tput` noise from tools that probe the terminal.
+- `KLEBORATE_REAL` — the real binary `kleborate_232_compat.sh` exec's. The
+  wrapper's `${KLEBORATE_REAL:-/usr/local/bin/kleborate}` fallback is only a
+  fallback; the `env` entry is what makes overriding it work.
+
+`scripts/` and `bactopia_config/` currently duplicate `commonBeforeScript`, the
+`env` scope, and the `singularity { }` block verbatim across seven configs, so
+every fix of this kind has to be applied seven times. A shared
+`nextflow.common.config` pulled in with `includeConfig` would stop them drifting.
