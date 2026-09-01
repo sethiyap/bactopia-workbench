@@ -110,3 +110,21 @@ Set in `env { }` in every site config (`scripts/nextflow.*.all_tools.config`):
 `env` scope, and the `singularity { }` block verbatim across seven configs, so
 every fix of this kind has to be applied seven times. A shared
 `nextflow.common.config` pulled in with `includeConfig` would stop them drifting.
+
+## Bracken crashes on 100%-classified samples (the `kraken_report_fix.sh` shim)
+
+Bactopia's `kraken-bracken-summary.py` (teton container) reads the unclassified
+count from the Kraken2 report's `U`-rank row, then does `unclassified_count +
+<float>`. Kraken2 **omits the `U` row entirely when 0 reads are unclassified** —
+common for ONT samples that classify to 100% — so `unclassified_count` is `None`
+and the task aborts with `TypeError: ... 'NoneType' and 'float'`, failing the
+whole batch. It's DB-build-dependent, not platform-dependent: the same sample can
+classify 100% against one `k2_pluspf` build and <100% against another, so it
+surfaces intermittently and looks host-specific when it isn't.
+
+Fix: every `nextflow.*.all_tools.config` (and `bactopia_config/`) carries a
+`withName: /.*:BRACKEN:BRACKEN_MODULE/` block that runs `scripts/kraken_report_fix.sh`
+(prepend a `0`-count `U` row — the correct value) before the summary, plus
+`errorStrategy = 'ignore'` as a backstop. **Apply this to all config copies**, and
+note the fix only takes effect once the deployment (`/g/data/rg42/bactopia-workbench`)
+is pulled up to date — a stale checkout runs the unpatched summary and crashes.
