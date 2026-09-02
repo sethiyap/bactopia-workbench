@@ -106,10 +106,22 @@ Set in `env { }` in every site config (`scripts/nextflow.*.all_tools.config`):
   wrapper's `${KLEBORATE_REAL:-/usr/local/bin/kleborate}` fallback is only a
   fallback; the `env` entry is what makes overriding it work.
 
-`scripts/` and `bactopia_config/` currently duplicate `commonBeforeScript`, the
-`env` scope, and the `singularity { }` block verbatim across seven configs, so
-every fix of this kind has to be applied seven times. A shared
-`nextflow.common.config` pulled in with `includeConfig` would stop them drifting.
+`scripts/` and `bactopia_config/` duplicate `commonBeforeScript`, the `env` scope,
+and the `singularity { }` block across the remaining configs, so every fix of this
+kind has to be applied several times. A shared `nextflow.common.config` pulled in
+with `includeConfig` would stop them drifting.
+
+**Which Gadi config is live.** `wrappers/submit.gadi.sh` exports
+`PIPELINE_ROOT=$project_root` (the clone you launch from), and `config/sites/gadi*.env`
+resolves `NEXTFLOW_CONFIG` against it. That pointed at
+`bactopia_config/nextflow.gadi.alltools.config` while slurm and local pointed at
+`scripts/nextflow.*.all_tools.config` — so the Gadi copy silently fell weeks behind
+the one being maintained, missing the exit-255 retry, `jobfs`, the CheckM fix, and
+the DefenseFinder / organism-typer `errorStrategy` blocks, and hardcoding one user's
+`/scratch` and `/home` paths. The site envs now point at
+`scripts/nextflow.gadi.all_tools.config`, and the `bactopia_config/` path is an
+`includeConfig` shim so stale references still get the current config. **Edit the
+`scripts/` config; never add settings to the shim.**
 
 ## Bracken crashes on 100%-classified samples (the `kraken_report_fix.sh` shim)
 

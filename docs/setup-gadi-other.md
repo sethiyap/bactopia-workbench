@@ -48,7 +48,7 @@ config key.
 | `BACTOPIA_PIPELINE` | `/g/data/${PROJECT}/bactopia/bactopia` | your Bactopia v3.2.0 checkout |
 | `DATASETS_CACHE` | `/g/data/${PROJECT}/bactopia_datasets/bactopia_datasets_custom` | your datasets cache |
 | `KRAKEN2_DB` | `/g/data/${PROJECT}/bactopia/kraken_indices/k2_pluspf_16_GB_...` | your Kraken2/Bracken DB |
-| `NEXTFLOW_CONFIG` | `$PIPELINE_ROOT/bactopia_config/nextflow.gadi.alltools.config` | keep (Gadi/PBS config) |
+| `NEXTFLOW_CONFIG` | `$PIPELINE_ROOT/scripts/nextflow.gadi.all_tools.config` | keep (Gadi/PBS config) |
 | `KLEBORATE_COMPAT_SCRIPT` | `$PIPELINE_ROOT/scripts/kleborate_232_compat.sh` | usually keep |
 | `FIMTYPER_PIPELINE` / `FIMTYPER_CONFIG` / `MERGE_FIMTYPER_SCRIPT` | rg42 paths | your FimTyper paths (if used) |
 | `MINIFORGE_ROOT` | `/g/data/${PROJECT}/bactopia_datasets/miniforge3` | your Miniforge |
