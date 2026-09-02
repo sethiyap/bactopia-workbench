@@ -231,6 +231,19 @@ ignorable; a tool whose image is absent is not. That is the whole difference bet
 DefenseFinder (image absent, killed the batch) and ShigEiFinder (image present, task
 ignored, batch survived) on the same run.
 
+`scripts/prestage_tool_containers.sh` closes this: it reads the container URIs out
+of the Bactopia install (so it tracks whatever versions Bactopia pins, rather than a
+list here that would go stale), computes Nextflow's cache filename for each, and
+downloads whatever is absent. `submit_workbench_pipeline.sh` runs it in
+`--check-only` mode as a preflight (`check_tool_containers`) and **warns** —
+deliberately not a hard failure, since the URIs are discovered heuristically and a
+discovery miss must not block a submission that would have worked. Set
+`PRESTAGE_CONTAINERS=1` to have the submission stage them instead, from a login node.
+
+`scripts/lib_singularity_cache.sh` holds the cache-name mangling and the
+download-then-verify-then-move logic shared by both cache scripts; keep it there
+rather than copying it into a second file.
+
 Pre-stage images for any tool beyond `DEFAULT_TOOLS_STRING` before running them on
 Gadi. `ADDITIONAL_TOOLS_STRING` (`RUN_ADDITIONAL_TOOLS=1`) pulls in ten tools whose
 images are not otherwise cached — that is the difference between a run that works

@@ -1149,6 +1149,53 @@ check_project_inode_quota() {
   log "WARN" "Neither lquota nor nci_account is available, so scratch project inode quota could not be checked."
 }
 
+check_tool_containers() {
+  # A container image that is ABSENT (as opposed to a 0-byte stub) is not something
+  # check_singularity_cache can see, and not something any errorStrategy can survive:
+  # Nextflow pulls from the driver before the first task is submitted, so on a host
+  # with no outbound internet the stage ends at "Failed to pull singularity image"
+  # with Exit Code: null and ignoredCount=0. afterok then deletes FimTyper,
+  # consolidation, mapping, MLST review and the workbook behind it.
+  #
+  # Warn rather than fail: the URIs are discovered by reading the Bactopia install,
+  # and a discovery miss must not block a submission that would have worked. Set
+  # PRESTAGE_CONTAINERS=1 to download the missing images here instead (login node
+  # only -- compute nodes cannot reach the registries either).
+  local prestage="$script_dir/prestage_tool_containers.sh"
+  local tools=${TOOLS_STRING:-}
+  local out line
+  local status=0
+
+  [[ ${CHECK_TOOL_CONTAINERS:-1} == 1 ]] || return 0
+  [[ ${RUN_TOOLS:-1} != 0 ]] || return 0
+  [[ -f $prestage ]] || return 0
+  [[ -n ${SING_CACHE:-} ]] || return 0
+  [[ -n ${BACTOPIA_PIPELINE:-} && -d ${BACTOPIA_PIPELINE:-} ]] || return 0
+
+  if [[ -z $tools ]]; then
+    tools=${DEFAULT_TOOLS_STRING:-abritamr amrfinderplus bracken checkm mlst plasmidfinder}
+    if [[ ${RUN_ADDITIONAL_TOOLS:-0} != 0 ]]; then
+      tools="$tools ${ADDITIONAL_TOOLS_STRING:-defensefinder ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}"
+    fi
+  fi
+
+  if [[ ${PRESTAGE_CONTAINERS:-0} == 1 ]]; then
+    log "INFO" "Pre-staging tool container images into ${SING_CACHE} (PRESTAGE_CONTAINERS=1)"
+    bash "$prestage" --bactopia "$BACTOPIA_PIPELINE" --dir "$SING_CACHE" --tools "$tools" --yes \
+      || fail "Could not pre-stage every tool container image. Run ${prestage} from a login node and re-submit."
+    return 0
+  fi
+
+  out=$(bash "$prestage" --bactopia "$BACTOPIA_PIPELINE" --dir "$SING_CACHE" --tools "$tools" --check-only 2>&1) || status=$?
+  (( status != 0 )) || return 0
+
+  while IFS= read -r line; do
+    [[ -n $line ]] && log "WARN" "$line"
+  done <<< "$out"
+  log "WARN" "A tool whose image is missing will abort its stage at pull time and delete every stage downstream of it."
+  log "WARN" "Stage them from a login node, or re-run this submission with PRESTAGE_CONTAINERS=1."
+}
+
 check_singularity_cache() {
   # A container pull attempted from a machine with no outbound internet -- every
   # Gadi *compute* node -- leaves a 0-byte file in SING_CACHE. Nextflow treats that
@@ -1420,6 +1467,7 @@ current_step="checking inode headroom"
 run_inode_preflight
 check_home_write_headroom
 check_singularity_cache
+check_tool_containers
 
 if [[ $dry_run == 1 ]]; then
   current_step="running dry-run validation"

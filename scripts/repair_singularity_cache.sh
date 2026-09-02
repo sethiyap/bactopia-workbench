@@ -40,6 +40,10 @@ Exit status is non-zero if any image is still broken when the script finishes.
 EOF
 }
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib_singularity_cache.sh
+source "$script_dir/lib_singularity_cache.sh"
+
 log()  { printf '[repair-sing-cache] %s\n' "$*" >&2; }
 fail() { printf '[repair-sing-cache] ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -66,95 +70,11 @@ done
 [[ -d $cache_dir ]] || fail "Cache directory not found: $cache_dir"
 
 if [[ -z $engine ]]; then
-  for candidate in singularity apptainer; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-      engine=$candidate
-      break
-    fi
-  done
+  engine=$(sc_detect_engine || true)
 fi
 if [[ -z $engine && ( $deep == 1 || $check_only == 0 ) ]]; then
   fail "Neither singularity nor apptainer is on PATH. On Gadi: module load singularity"
 fi
-
-# Reverse Nextflow's cache naming (SingularityCache.simpleName): the container URL
-# has its protocol stripped and every '/' and ':' replaced with '-', then '.img'
-# appended. Two forms appear in this pipeline's configs:
-#
-#   depot.galaxyproject.org-singularity-<pkg>-<tag>.img
-#     -> https://depot.galaxyproject.org/singularity/<pkg>:<tag>   (plain download)
-#   quay.io-biocontainers-<pkg>-<tag>.img
-#     -> docker://quay.io/biocontainers/<pkg>:<tag>                (engine pull)
-#
-# Splitting <pkg> from <tag> is the only ambiguous part, because both may contain
-# '-'. Biocontainer tags always start with a digit and package names never end in
-# one, so the tag is the last '-'-delimited run that starts with a digit.
-split_pkg_tag() {
-  local rest=$1
-  [[ $rest =~ ^(.+)-([0-9][^-]*(--.*)?)$ ]] || return 1
-  printf '%s:%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
-}
-
-image_source() {
-  local base=$1 stem rest pkg_tag
-
-  stem=${base%.img}
-  stem=${stem%.sif}
-
-  case "$stem" in
-    depot.galaxyproject.org-singularity-*)
-      rest=${stem#depot.galaxyproject.org-singularity-}
-      pkg_tag=$(split_pkg_tag "$rest") || return 1
-      printf 'https://depot.galaxyproject.org/singularity/%s\n' "$pkg_tag"
-      ;;
-    quay.io-biocontainers-*)
-      rest=${stem#quay.io-biocontainers-}
-      pkg_tag=$(split_pkg_tag "$rest") || return 1
-      printf 'docker://quay.io/biocontainers/%s\n' "$pkg_tag"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-image_is_usable() {
-  local path=$1
-
-  [[ -s $path ]] || return 1
-  [[ $deep == 1 ]] || return 0
-  "$engine" exec "$path" true >/dev/null 2>&1
-}
-
-download_image() {
-  local source=$1 dest=$2 tmp
-
-  tmp=$(mktemp "${dest}.repair.XXXXXX") || return 1
-
-  if [[ $source == docker://* ]]; then
-    # `pull --force` writes the final path directly, so pull to the temp name.
-    if ! "$engine" pull --force "$tmp" "$source" >&2; then
-      rm -f "$tmp"
-      return 1
-    fi
-  else
-    if ! curl -fsSL --retry 3 -o "$tmp" "$source" >&2; then
-      rm -f "$tmp"
-      return 1
-    fi
-  fi
-
-  # Verify BEFORE it goes into the cache, so a bad download is never visible to
-  # Nextflow as a cached image.
-  if [[ ! -s $tmp ]] || ! "$engine" exec "$tmp" true >/dev/null 2>&1; then
-    log "Downloaded image failed verification, discarding: $source"
-    rm -f "$tmp"
-    return 1
-  fi
-
-  chmod 755 "$tmp"
-  mv -f "$tmp" "$dest"
-}
 
 declare -a images=()
 if [[ ${#wanted[@]} -gt 0 ]]; then
@@ -183,7 +103,7 @@ for path in "${images[@]}"; do
     broken+=("$path")
     continue
   fi
-  image_is_usable "$path" || broken+=("$path")
+  sc_image_is_usable "$path" "$engine" "$deep" || broken+=("$path")
 done
 
 if [[ ${#broken[@]} -eq 0 ]]; then
@@ -215,7 +135,7 @@ fi
 for path in "${broken[@]}"; do
   base=$(basename "$path")
 
-  if ! source=$(image_source "$base"); then
+  if ! source=$(sc_image_source "$base"); then
     log "Cannot derive a source URL for: $base (pull it by hand)"
     unresolved+=("$base")
     still_broken+=("$base")
@@ -229,7 +149,7 @@ for path in "${broken[@]}"; do
   # Nextflow a cached image, which is exactly how this cache got poisoned.
   rm -f "$path"
 
-  if download_image "$source" "$path"; then
+  if sc_download_image "$source" "$path" "$engine"; then
     log "  ok ($(wc -c < "$path" | tr -d " ") bytes)"
     repaired+=("$base")
   else
