@@ -208,15 +208,44 @@ tool_container_uris() {
   prefer_depot_uris "${found[@]}"
 }
 
-# Tools whose container the site config pins explicitly: Bactopia's own declaration
-# is never pulled, so a "missing" report for it is noise. The config reads these
-# same variables (see nextflow.*.all_tools.config).
+# A tool whose container the site config pins explicitly never pulls Bactopia's own
+# declaration, so reporting that one as missing is noise (it was reporting mlst at
+# Bactopia's 2.23.0 while the config pins 2.33.1).
+#
+# Detect the override from the config rather than from a hardcoded list of versions
+# here -- a second copy of those pins is exactly the drift that put the Gadi config
+# weeks behind. The configs all use the same `<TOOL>_CONTAINER` env-var convention:
+#
+#   def mlstContainer = System.getenv('MLST_CONTAINER') ?: "${singCache}/mlst-...sif"
+#
+# so an exported value wins, and otherwise the mere presence of that variable name
+# in NEXTFLOW_CONFIG tells us the tool is pinned, without needing to know to what.
 tool_container_override() {
-  case "$1" in
-    mlst)      printf '%s\n' "${MLST_CONTAINER:-}" ;;
-    kleborate) printf '%s\n' "${KLEBORATE_CONTAINER:-}" ;;
-    *)         printf '\n' ;;
-  esac
+  local tool=$1 var value
+
+  var=$(printf '%s' "$tool" | tr '[:lower:]-' '[:upper:]_')_CONTAINER
+
+  # A tool name with characters that cannot appear in a shell identifier would make
+  # the eval below a syntax error, so leave those alone rather than dying on them.
+  if [[ ! $var =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  eval "value=\${${var}:-}"
+
+  if [[ -n $value ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+
+  if [[ -n ${NEXTFLOW_CONFIG:-} && -f ${NEXTFLOW_CONFIG:-} ]] \
+     && grep -q "$var" "$NEXTFLOW_CONFIG" 2>/dev/null; then
+    printf 'CONFIG_PINNED\n'
+    return 0
+  fi
+
+  printf '\n'
 }
 
 declare -a missing_names=() missing_sources=() missing_tools=()
@@ -230,6 +259,11 @@ log ""
 
 for tool in "${tools[@]}"; do
   override=$(tool_container_override "$tool")
+  if [[ $override == "CONFIG_PINNED" ]]; then
+    log "$tool: container pinned by $(basename "$NEXTFLOW_CONFIG"); Bactopia's own image is not used"
+    present=$((present + 1))
+    continue
+  fi
   if [[ -n $override ]]; then
     if [[ -e $override ]]; then
       log "$tool: pinned by config to $override (skipping Bactopia's own image)"
@@ -281,6 +315,13 @@ log "Present: ${present}   Missing: ${#missing_names[@]}"
 
 if [[ ${#no_uri_tools[@]} -gt 0 ]]; then
   log "No URI discovered for: ${no_uri_tools[*]} -- check these by hand if they fail."
+fi
+
+if [[ ${#no_uri_tools[@]} -eq ${#tools[@]} ]]; then
+  log ""
+  log "No container URI resolved for ANY requested tool. That is a discovery failure,"
+  log "not a clean cache -- check the tool names and --bactopia path."
+  exit 1
 fi
 
 if [[ ${#missing_names[@]} -eq 0 ]]; then
