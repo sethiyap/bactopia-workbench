@@ -176,3 +176,41 @@ worth diagnosing published nothing.
 
 `scripts/copy_RDS_to_GADI.sh` and `scripts/submit_transfer_gadi_to_rds.sh` still
 leave `PBS_LOG_DIR` empty and so remain exposed to the same fallback.
+
+## A failed pull poisons `SING_CACHE` (zero-byte `.img` stubs)
+
+Gadi **compute** nodes have no outbound internet, and Nextflow pulls a container
+from the *driver* process — which for the tool stages is a compute-node job. When
+that pull fails, Singularity has already created the destination file, so a
+**0-byte `.img` stub** is left in `SING_CACHE`. Nextflow then treats the stub as a
+cached image and never attempts the pull again, so every task using it dies with
+
+```
+FATAL: ... could not open image ...: image format not recognized
+```
+
+and exit status **255**, on that run and every run after it. The retry rule in
+`nextflow.*.all_tools.config` (`exitStatus in [125, 126, 255] && attempt <= 3`)
+does not help — it exists for the transient loop-device failure, and this is
+deterministic. Symptoms that make it look like something else:
+
+- It is **per tool**, and only the tools whose images happened to be pulled while
+  offline, so it reads as "tool X is broken" or "ONT input is broken" when the
+  real variable is which images were already cached.
+- Tools carrying `errorStrategy = 'ignore'` (`ECTYPER`, `SHIGATYPER`,
+  `SHIGEIFINDER`, `SHIGAPASS`, `DEFENSEFINDER_RUN`) exit 0 and publish nothing
+  instead of failing, so a poisoned image there is **silent**.
+- The stage dies, `afterok` deletes FimTyper, which deletes consolidation, and the
+  only mail you get is `Job deleted as result of dependency`.
+
+Repair with `scripts/repair_singularity_cache.sh` **from a login node** — it finds
+stubs (`--deep` also runs each image to catch truncated downloads), rederives the
+source URL from Nextflow's cache naming, and downloads to a temp file that is
+verified before it is moved into place, so an interrupted repair cannot
+re-poison the cache. `submit_workbench_pipeline.sh` refuses to submit while any
+zero-byte image is in `SING_CACHE` (`check_singularity_cache`).
+
+Pre-stage images for any tool beyond `DEFAULT_TOOLS_STRING` before running them on
+Gadi. `ADDITIONAL_TOOLS_STRING` (`RUN_ADDITIONAL_TOOLS=1`) pulls in ten tools whose
+images are not otherwise cached — that is the difference between a run that works
+and one that does not, not the input read type.

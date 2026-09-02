@@ -1149,6 +1149,32 @@ check_project_inode_quota() {
   log "WARN" "Neither lquota nor nci_account is available, so scratch project inode quota could not be checked."
 }
 
+check_singularity_cache() {
+  # A container pull attempted from a machine with no outbound internet -- every
+  # Gadi *compute* node -- leaves a 0-byte file in SING_CACHE. Nextflow treats that
+  # stub as a cached image and never retries the pull, so every task using it dies
+  # with "image format not recognized" and exit 255, deterministically, on every
+  # later run. Cheap to detect here; expensive to diagnose afterwards, because the
+  # tools that break are whichever ones were pulled while offline.
+  local cache=${SING_CACHE:-}
+  local path
+  local -a stubs=()
+
+  [[ -n $cache && -d $cache ]] || return 0
+
+  while IFS= read -r path; do
+    stubs+=("$path")
+  done < <(find "$cache" -maxdepth 1 -type f \( -name '*.img' -o -name '*.sif' \) -size 0 2>/dev/null | sort)
+
+  (( ${#stubs[@]} > 0 )) || return 0
+
+  log "ERROR" "Singularity cache holds ${#stubs[@]} zero-byte image stub(s) in $cache:"
+  for path in "${stubs[@]}"; do
+    log "ERROR" "  $(basename "$path")"
+  done
+  fail "Every task using those images would fail with exit 255. Repair them from a LOGIN node: ${script_dir}/repair_singularity_cache.sh --dir ${cache}"
+}
+
 check_home_write_headroom() {
   # A full $HOME is silent until it is fatal: on Gadi it breaks conda/module
   # startup inside the job and, when a stage's .o/.e still lands there, PBS reports
@@ -1393,6 +1419,7 @@ fi
 current_step="checking inode headroom"
 run_inode_preflight
 check_home_write_headroom
+check_singularity_cache
 
 if [[ $dry_run == 1 ]]; then
   current_step="running dry-run validation"
