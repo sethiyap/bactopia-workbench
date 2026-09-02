@@ -111,18 +111,72 @@ fi
 
 mkdir -p "$cache_dir"
 
-# Bactopia's modules follow the nf-core idiom, carrying both a depot.galaxyproject
-# (singularity) and a quay.io (docker) URI. Prefer the singularity one: it is what
-# Nextflow uses under -profile singularity, and it downloads without an engine.
+# Bactopia's modules follow the nf-core idiom, declaring both a depot.galaxyproject
+# (singularity) and a quay.io (docker) URI for the same package:
+#
+#   container "${ workflow.containerEngine == 'singularity' && !task.ext... ?
+#       'https://depot.galaxyproject.org/singularity/phispy:4.2.21--py310h0dbaff4_2' :
+#       'quay.io/biocontainers/phispy:4.2.21--py310h0dbaff4_2' }"
+#
+# Under -profile singularity only the depot side is ever pulled, so staging the quay
+# twin downloads an image Nextflow will never look for. Keep the quay URI only when a
+# package has no depot form at all.
+prefer_depot_uris() {
+  local -a all=("$@")
+  local uri pkgtag
+  local depot_pkgtags=" "
+
+  for uri in "${all[@]}"; do
+    case "$uri" in
+      https://depot.galaxyproject.org/*)
+        depot_pkgtags="${depot_pkgtags}${uri##*/} "
+        ;;
+    esac
+  done
+
+  for uri in "${all[@]}"; do
+    pkgtag=${uri##*/}
+    case "$uri" in
+      https://depot.galaxyproject.org/*)
+        printf '%s\n' "$uri"
+        ;;
+      *)
+        [[ $depot_pkgtags == *" $pkgtag "* ]] && continue
+        printf '%s\n' "$uri"
+        ;;
+    esac
+  done
+}
+
+# A subworkflow directory usually holds only `include` statements; the container
+# directive lives in the module it points at (mashdist -> modules/.../mash/dist).
+# Follow one level of includes so those modules are searched too.
+include_target_dirs() {
+  local -a dirs=("$@")
+  local nf inc_path resolved
+
+  [[ ${#dirs[@]} -gt 0 ]] || return 0
+
+  while IFS= read -r nf; do
+    while IFS= read -r inc_path; do
+      [[ -n $inc_path ]] || continue
+      resolved=$(cd "$(dirname "$nf")" 2>/dev/null && cd "$(dirname "$inc_path")" 2>/dev/null && pwd) || continue
+      printf '%s\n' "$resolved"
+    done < <(grep -hoE "from +['\"][^'\"]+['\"]" "$nf" 2>/dev/null \
+               | sed -E "s/^from +['\"]//; s/['\"]$//")
+  done < <(find "${dirs[@]}" -maxdepth 2 -name '*.nf' 2>/dev/null)
+}
+
 tool_container_uris() {
   local tool=$1
-  local -a search=()
-  local d
+  local -a search=() extra=()
+  local d uri
+  local -a found=()
 
   # Most specific first: a subworkflow or module directory named for the tool.
   while IFS= read -r d; do
     search+=("$d")
-  done < <(find "$bactopia_dir" -maxdepth 6 -type d \
+  done < <(find "$bactopia_dir" -maxdepth 8 -type d \
              \( -path '*/subworkflows/*' -o -path '*/modules/*' \) \
              -iname "$tool" 2>/dev/null)
 
@@ -130,17 +184,39 @@ tool_container_uris() {
   if [[ ${#search[@]} -eq 0 ]]; then
     while IFS= read -r d; do
       search+=("$d")
-    done < <(find "$bactopia_dir" -maxdepth 6 -type d \
+    done < <(find "$bactopia_dir" -maxdepth 8 -type d \
                \( -path '*/subworkflows/*' -o -path '*/modules/*' \) \
                -iname "*${tool}*" 2>/dev/null)
   fi
 
   [[ ${#search[@]} -gt 0 ]] || return 1
 
-  {
+  while IFS= read -r d; do
+    [[ -n $d && -d $d ]] && extra+=("$d")
+  done < <(include_target_dirs "${search[@]}" | sort -u)
+
+  [[ ${#extra[@]} -gt 0 ]] && search+=("${extra[@]}")
+
+  while IFS= read -r uri; do
+    [[ -n $uri ]] && found+=("$uri")
+  done < <({
     grep -rhoE 'https://depot\.galaxyproject\.org/singularity/[A-Za-z0-9._:+-]+' "${search[@]}" 2>/dev/null || true
     grep -rhoE '(docker://)?quay\.io/biocontainers/[A-Za-z0-9._:+-]+' "${search[@]}" 2>/dev/null || true
-  } | sed 's/[.,)"'"'"']*$//' | sort -u
+  } | sed 's/[.,)"'"'"']*$//' | sort -u)
+
+  [[ ${#found[@]} -gt 0 ]] || return 1
+  prefer_depot_uris "${found[@]}"
+}
+
+# Tools whose container the site config pins explicitly: Bactopia's own declaration
+# is never pulled, so a "missing" report for it is noise. The config reads these
+# same variables (see nextflow.*.all_tools.config).
+tool_container_override() {
+  case "$1" in
+    mlst)      printf '%s\n' "${MLST_CONTAINER:-}" ;;
+    kleborate) printf '%s\n' "${KLEBORATE_CONTAINER:-}" ;;
+    *)         printf '\n' ;;
+  esac
 }
 
 declare -a missing_names=() missing_sources=() missing_tools=()
@@ -153,6 +229,20 @@ log "Tools    : ${tools[*]}"
 log ""
 
 for tool in "${tools[@]}"; do
+  override=$(tool_container_override "$tool")
+  if [[ -n $override ]]; then
+    if [[ -e $override ]]; then
+      log "$tool: pinned by config to $override (skipping Bactopia's own image)"
+      present=$((present + 1))
+    else
+      log "$tool: pinned by config to $override -- WHICH DOES NOT EXIST"
+      missing_names+=("$(basename "$override")")
+      missing_sources+=("")
+      missing_tools+=("$tool")
+    fi
+    continue
+  fi
+
   # Plain arrays and a string of seen names, not mapfile/declare -A: this has to run
   # under the bash 3.2 that ships on macOS as well as Gadi's bash 4.
   uris=()
@@ -219,6 +309,11 @@ failed=0
 for i in "${!missing_names[@]}"; do
   name=${missing_names[$i]}
   source=${missing_sources[$i]}
+  if [[ -z $source ]]; then
+    log "Cannot stage ${missing_tools[$i]}: $name is pinned by config, not derivable from a registry"
+    failed=$((failed + 1))
+    continue
+  fi
   log "Staging ${missing_tools[$i]}: $name"
   log "  from $source"
   if sc_download_image "$source" "$cache_dir/$name" "$engine"; then
