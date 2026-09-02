@@ -609,7 +609,7 @@ Because there are no reads with assembly input:
 - **Assembly-based tools all work**: `mlst`, `checkm`, `abritamr`, `amrfinderplus`,
   `plasmidfinder`, plus `kleborate`, `fimtyper`, ST131Typer, PADLOC (with
   `--padloc`), and (with `--additional-tools yes`) `mobsuite`, `phispy`, `ectyper`,
-  `shiga*`, `defensefinder`.
+  `shiga*`.
 
 A complete local example (controls excluded; FimTyper + ST131Typer run by default):
 
@@ -710,9 +710,12 @@ default**. It is not a Bactopia v3.2.0 bactopia-tool, so it cannot be added to
 assemblies. Turn it on with `--padloc` (or `RUN_PADLOC=1` in the site config) once
 `PADLOC_ENV` / `PADLOC_BIN` / `PADLOC_CONTAINER` points at an install — see
 [PADLOC](#padloc-anti-phage-defence-systems). If PADLOC is requested but no install
-can be reached, the run **skips it with a warning** rather than failing. Note the
-overlap with `defensefinder` in the additional-tools bundle below: both call
-anti-phage defence systems, from different model sets.
+can be reached, the run **skips it with a warning** rather than failing. PADLOC is
+the anti-phage defence caller this pipeline uses: `defensefinder` covers the same
+ground from a different model set, but is **not** in the additional-tools bundle,
+because it fetches its models from GitHub at run time and so cannot work where
+compute nodes have no internet (Gadi). Add it to `ADDITIONAL_TOOLS_STRING` yourself
+on a site that does have outbound access.
 
 **Additional tools** — opt-in bundle (`RUN_ADDITIONAL_TOOLS=0`,
 `ADDITIONAL_TOOLS_STRING`), enabled with `--additional-tools yes`:
@@ -724,7 +727,7 @@ anti-phage defence systems, from different model sets.
 | `mobsuite` | Plasmid reconstruction / typing |
 | `mashdist` | Mash distance (relatedness) |
 | `mykrobe` | AMR / lineage (needs `MYKROBE_SPECIES`) |
-| `defensefinder` | Anti-phage defense systems (optional `DEFENSEFINDER_DB`) |
+| `defensefinder` | Anti-phage defense systems — **not in the bundle**; needs internet on the compute nodes, so it cannot run on Gadi. Add it to `ADDITIONAL_TOOLS_STRING` on a site that has outbound access. Use PADLOC instead on Gadi. |
 | `ismapper` | Insertion-sequence mapping |
 | `phispy` | Prophage detection |
 

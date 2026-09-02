@@ -668,7 +668,7 @@ run_dry_run_validation() {
   local run_kleborate=${RUN_KLEBORATE:-1}
   local run_fimtyper=${RUN_FIMTYPER:-1}
   local default_tools_string=${DEFAULT_TOOLS_STRING:-abritamr amrfinderplus bracken checkm mlst plasmidfinder}
-  local additional_tools_string=${ADDITIONAL_TOOLS_STRING:-defensefinder ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}
+  local additional_tools_string=${ADDITIONAL_TOOLS_STRING:-ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}
   local tools_string=${TOOLS_STRING:-}
   local tmp_root=""
   local tmp_samplesheet=""
@@ -1175,7 +1175,7 @@ check_tool_containers() {
   if [[ -z $tools ]]; then
     tools=${DEFAULT_TOOLS_STRING:-abritamr amrfinderplus bracken checkm mlst plasmidfinder}
     if [[ ${RUN_ADDITIONAL_TOOLS:-0} != 0 ]]; then
-      tools="$tools ${ADDITIONAL_TOOLS_STRING:-defensefinder ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}"
+      tools="$tools ${ADDITIONAL_TOOLS_STRING:-ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}"
     fi
   fi
 

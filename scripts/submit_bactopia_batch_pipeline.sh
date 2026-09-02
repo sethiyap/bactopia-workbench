@@ -27,8 +27,9 @@ Environment variables:
                           abritamr amrfinderplus bracken checkm mlst plasmidfinder
                           Kleborate is enabled separately through RUN_KLEBORATE
   ADDITIONAL_TOOLS_STRING Default additional non-Kleborate tool list:
-                          defensefinder ectyper ismapper mashdist mobsuite mykrobe
+                          ectyper ismapper mashdist mobsuite mykrobe
                           phispy shigapass shigatyper shigeifinder
+                          defensefinder is NOT included -- see config/defaults.env
   TOOLS_STRING            Optional explicit non-Kleborate tool list for
                           run_extra_bactopia_tools.pbs. Overrides the default
                           and additional bundles when set.
@@ -125,7 +126,7 @@ RUN_TOOLS=${RUN_TOOLS:-1}
 RUN_TOOLS_PARALLEL=${RUN_TOOLS_PARALLEL:-0}
 RUN_ADDITIONAL_TOOLS=${RUN_ADDITIONAL_TOOLS:-0}
 DEFAULT_TOOLS_STRING=${DEFAULT_TOOLS_STRING:-abritamr amrfinderplus bracken checkm mlst plasmidfinder}
-ADDITIONAL_TOOLS_STRING=${ADDITIONAL_TOOLS_STRING:-defensefinder ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}
+ADDITIONAL_TOOLS_STRING=${ADDITIONAL_TOOLS_STRING:-ectyper ismapper mashdist mobsuite mykrobe phispy shigapass shigatyper shigeifinder}
 TOOLS_STRING=${TOOLS_STRING:-}
 KRAKEN2_DB=${KRAKEN2_DB:-}
 MYKROBE_SPECIES=${MYKROBE_SPECIES:-}
