@@ -355,12 +355,27 @@ else
   log_file=$results_root_arg/submit_workbench_pipeline_$(date '+%Y%m%d_%H%M%S').log
 fi
 
-# Local (scheduler-free) backend: if the caller did not set PBS_LOG_DIR, capture
-# each stage's stdout/stderr next to the pipeline log instead of discarding it to
-# /dev/null (see the local branch in lib_scheduler.sh:scheduler_submit). Without
-# this, a failing stage prints only "see log: /dev/null" and the real error is lost.
-if [[ $scheduler_backend == "local" && -z ${PBS_LOG_DIR:-} ]]; then
-  PBS_LOG_DIR="$(dirname "$log_file")/stage-logs"
+# Every stage's stdout/stderr must land somewhere the job can actually write.
+#
+# With PBS_LOG_DIR unset, scheduler_submit omits -o/-e and PBS delivers each .o/.e
+# to the *submission* directory. On Gadi that is usually under $HOME, whose 10 GB
+# quota is easy to exceed (Nextflow's ~/.nextflow cache, conda envs); once it is
+# full the delivery fails and the only trace is a mail with
+#   Post job file processing error; job <id> on host <node>
+# and the job's entire log is gone. It is also not guaranteed to be reachable from
+# the job at all, since the stage scripts only request -l storage=scratch/<project>
+# +gdata/<project>. Default it under the results tree instead: that path is on the
+# project scratch the stages already mount, and scheduler_submit mkdir -p's it.
+#
+# Local (scheduler-free) backend: same idea, next to the pipeline log, so a failing
+# stage does not print "see log: /dev/null" and lose the real error (see the local
+# branch in lib_scheduler.sh:scheduler_submit).
+if [[ -z ${PBS_LOG_DIR:-} ]]; then
+  if [[ $scheduler_backend == "local" ]]; then
+    PBS_LOG_DIR="$(dirname "$log_file")/stage-logs"
+  else
+    PBS_LOG_DIR="$results_root_arg/pipeline_logs/scheduler"
+  fi
 fi
 
 submit_script=${SUBMIT_PIPELINE_SCRIPT:-$script_dir/submit_bactopia_batch_pipeline.sh}
@@ -1134,6 +1149,28 @@ check_project_inode_quota() {
   log "WARN" "Neither lquota nor nci_account is available, so scratch project inode quota could not be checked."
 }
 
+check_home_write_headroom() {
+  # A full $HOME is silent until it is fatal: on Gadi it breaks conda/module
+  # startup inside the job and, when a stage's .o/.e still lands there, PBS reports
+  # only "Post job file processing error; job <id> on host <node>" and discards the
+  # log. Probe it with a real 1 MiB write (an empty file can still be created at
+  # quota) and warn early. Non-fatal: the pipeline's own logs and caches are kept
+  # off $HOME, so a full home does not by itself stop a run.
+  local probe status=0
+
+  probe=$(mktemp "$HOME/.agar_home_probe.XXXXXX" 2>/dev/null) || {
+    log "WARN" "Could not create a probe file in \$HOME ($HOME). It is likely full or over quota; check with 'quota -s'."
+    return 0
+  }
+
+  dd if=/dev/zero of="$probe" bs=1M count=1 status=none 2>/dev/null || status=$?
+  rm -f "$probe"
+
+  if (( status != 0 )); then
+    log "WARN" "\$HOME ($HOME) cannot take a 1 MiB write -- it is full or over quota. Free space (check 'quota -s'; ~/.nextflow and conda envs are the usual culprits) before relying on anything that writes there."
+  fi
+}
+
 run_inode_preflight() {
   local scratch_project=""
 
@@ -1355,6 +1392,7 @@ fi
 
 current_step="checking inode headroom"
 run_inode_preflight
+check_home_write_headroom
 
 if [[ $dry_run == 1 ]]; then
   current_step="running dry-run validation"

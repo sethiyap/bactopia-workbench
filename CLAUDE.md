@@ -128,3 +128,51 @@ Fix: every `nextflow.*.all_tools.config` (and `bactopia_config/`) carries a
 `errorStrategy = 'ignore'` as a backstop. **Apply this to all config copies**, and
 note the fix only takes effect once the deployment (`/g/data/rg42/bactopia-workbench`)
 is pulled up to date — a stale checkout runs the unpatched summary and crashes.
+
+## PBS "Post job file processing error" = stage-out failed, not the job
+
+```
+PBS Job Id: 177942309.gadi-pbs
+Job Name:   tb001_bracken
+Post job file processing error; job 177942309.gadi-pbs on host gadi-cpu-clx-1439
+```
+
+This comes from the PBS MoM's epilogue, *after* the job body has finished: PBS
+could not deliver the job's `.o`/`.e` to their destination. It says nothing about
+whether the tool ran, and it destroys the only log that would have. It is
+unrelated to the Bracken `TypeError` above — a `tb<batch>_bracken` job hitting
+this has not necessarily failed at all.
+
+Two things caused it here, both now fixed:
+
+- **The destination was `$HOME`.** With `PBS_LOG_DIR` unset, `scheduler_submit`
+  ([`scripts/lib_scheduler.sh`](scripts/lib_scheduler.sh)) omitted `-o`/`-e`
+  entirely and PBS fell back to the submission directory. Gadi `/home` has a
+  10 GB quota; over it, the copy fails. `submit_workbench_pipeline.sh` and
+  `submit_bactopia_batch_pipeline.sh` now default `PBS_LOG_DIR` to
+  `<RESULTS_ROOT>/pipeline_logs/scheduler`, which is on the project scratch every
+  stage already requests via `-l storage=`. Never let `-o`/`-e` go unset: the
+  submission directory is not guaranteed to be mounted inside the job either.
+- **`NXF_HOME` defaulted to `$HOME/.nextflow`,** so every Nextflow stage grew
+  home on every run. The four Nextflow stage scripts now put it beside
+  `SING_CACHE` (`$(dirname "$SING_CACHE")/nextflow_home`, i.e. on scratch).
+
+`submit_workbench_pipeline.sh` also runs `check_home_write_headroom` next to the
+inode preflight: a real 1 MiB write into `$HOME` (an empty file can still be
+created at quota), warning rather than failing, since nothing the pipeline needs
+lives there any more.
+
+Triage when it happens again: `qstat -xf <jobid>` for `Exit_status`,
+`Output_Path` and `comment`; then the stage's own Nextflow log, which never goes
+through PBS stage-out, at
+`<RESULTS_ROOT>/_work/bactopia_tools/<batch>_tools_<tool>/.nextflow.log` with the
+task dirs under `work/<tool>/*/.command.err`.
+
+The Nextflow stage scripts (`run_extra_bactopia_tools.pbs`,
+`run_fimtyper_batch.pbs`, `run_kleborate_batch.pbs`) also publish `.nextflow.log`
+from an `EXIT` trap rather than only after a successful `nextflow run`. Under
+`set -e` a failed run exited before the closing `rsync`, so precisely the runs
+worth diagnosing published nothing.
+
+`scripts/copy_RDS_to_GADI.sh` and `scripts/submit_transfer_gadi_to_rds.sh` still
+leave `PBS_LOG_DIR` empty and so remain exposed to the same fallback.

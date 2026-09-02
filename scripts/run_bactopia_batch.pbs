@@ -85,10 +85,13 @@ if [[ "${USE_MODULES:-1}" == "1" ]]; then
 fi
 
 # NXF_HOME holds Nextflow's downloaded jar and capsule dependencies. Keep it in a
-# persistent, per-user location (default $HOME/.nextflow) rather than the per-run
-# scratch dir, so every batch does not re-download Nextflow -- which is both slow
-# and a network failure mode. Overridable via NXF_HOME for sites with a shared cache.
-export NXF_HOME="${NXF_HOME:-$HOME/.nextflow}"
+# persistent, per-user location rather than the per-run scratch dir, so every batch
+# does not re-download Nextflow -- which is both slow and a network failure mode.
+# It sits beside SING_CACHE (so it follows whatever cache root the site configures)
+# and deliberately NOT in $HOME: on Gadi the 10 GB home quota fills quickly, and a
+# full home breaks Nextflow startup and PBS's own stage-out of the job .o/.e files.
+# Overridable via NXF_HOME for sites with a shared cache.
+export NXF_HOME="${NXF_HOME:-$(dirname "$SING_CACHE")/nextflow_home}"
 export NXF_WORK="$SCRATCH_RUN/work"
 export NXF_SINGULARITY_CACHEDIR="$SING_CACHE"
 export SINGULARITY_CACHEDIR="$SING_CACHE"

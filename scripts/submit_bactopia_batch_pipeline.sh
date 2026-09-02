@@ -200,7 +200,12 @@ BACTOPIA_PIPELINE=${BACTOPIA_PIPELINE:-}
 DATASETS_CACHE=${DATASETS_CACHE:-}
 SING_CACHE=${SING_CACHE:-}
 KLEBORATE_COMPAT_SCRIPT=${KLEBORATE_COMPAT_SCRIPT:-$script_dir/kleborate_232_compat.sh}
-PBS_LOG_DIR=${PBS_LOG_DIR:-}
+# Never leave -o/-e off the qsub: with PBS_LOG_DIR empty, PBS delivers each job's
+# .o/.e to the submission directory, which on Gadi is usually under the 10 GB $HOME
+# quota and is not covered by the stages' -l storage= request. A failed delivery
+# reports only "Post job file processing error" and loses the whole job log, so
+# default to a directory on the same scratch tree the results live in.
+PBS_LOG_DIR=${PBS_LOG_DIR:-${RESULTS_ROOT}/pipeline_logs/scheduler}
 PBS_MAIL_OPTIONS=${PBS_MAIL_OPTIONS:-}
 PBS_MAIL_USER=${PBS_MAIL_USER:-}
 BACTOPIA_INPUT_MODE=${BACTOPIA_INPUT_MODE:-illumina}
