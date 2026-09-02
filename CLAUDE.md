@@ -222,6 +222,15 @@ verified before it is moved into place, so an interrupted repair cannot
 re-poison the cache. `submit_workbench_pipeline.sh` refuses to submit while any
 zero-byte image is in `SING_CACHE` (`check_singularity_cache`).
 
+**A missing image fails earlier than any `errorStrategy`.** Nextflow pulls
+containers from the driver process, before the first task is submitted, so a failed
+pull ends the session with `Exit Code: null`, `ignoredCount=0`, and no task ever
+executed. No `withName:` directive can catch it — `errorStrategy = 'ignore'` only
+applies to tasks that ran. A tool whose image is present but whose *task* fails is
+ignorable; a tool whose image is absent is not. That is the whole difference between
+DefenseFinder (image absent, killed the batch) and ShigEiFinder (image present, task
+ignored, batch survived) on the same run.
+
 Pre-stage images for any tool beyond `DEFAULT_TOOLS_STRING` before running them on
 Gadi. `ADDITIONAL_TOOLS_STRING` (`RUN_ADDITIONAL_TOOLS=1`) pulls in ten tools whose
 images are not otherwise cached — that is the difference between a run that works
