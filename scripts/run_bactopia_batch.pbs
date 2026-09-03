@@ -200,7 +200,10 @@ if [[ -f "$SAMPLESHEET" && "$GENOME_SIZE" =~ ^[1-9][0-9]*$ ]]; then
     tail -n +2 "$SAMPLESHEET" | while IFS=$'\t' read -r csample cruntype cr1 cr2 cextra; do
       [[ -z "$csample" ]] && continue
       ctotal=0
-      for cfq in "$cr1" "$cr2"; do
+      # A lane-split sample is one merge-pe row whose r1/r2 hold comma-separated
+      # paths; its coverage is the sum over every lane, so split before summing.
+      IFS=',' read -r -a cfqs <<< "${cr1},${cr2}"
+      for cfq in "${cfqs[@]}"; do
         [[ -n "$cfq" && -f "$cfq" ]] || continue
         cbp=$(zcat -f -- "$cfq" 2>/dev/null | awk 'NR%4==2{b+=length($0)} END{printf "%d", b+0}')
         ctotal=$((ctotal + cbp))
