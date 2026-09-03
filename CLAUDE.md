@@ -274,3 +274,44 @@ single path.** Anything reading `r1`/`r2` must split on `,` first. Already done 
 
 Consumers that only read the `sample` column (`split_bactopia_samplesheet.sh`, the
 `EXCLUDE_SAMPLE_REGEX` filter, `validate_metadata_samples.py`) need no change.
+
+## A fork/pipe error in `.command.err` means the task hit its own memory cap
+
+```
+Loading mash-refseq88.k21.msh...
+.command.run: cannot make pipe for process substitution: Too many open files in system
+.command.run: fork: Cannot allocate memory
+```
+
+This reads like a node-wide file-descriptor and memory shortage. It is not: it is the
+task's PBS/cgroup memory limit refusing the pipe and the fork. `Too many open files in
+system` is normally `ENFILE` (the kernel's system-wide file table), which is what makes
+it so misleading — with kernel-memory accounting on, a cgroup at its limit reports the
+same errno.
+
+Confirm it from the **task's own** PBS job, not the driver job:
+
+```
+qstat -xf <task jobid> | grep -E 'resources_used.mem|Resource_List.mem|Exit_status'
+```
+
+`resources_used.mem` at or above `Resource_List.mem` settles it. For SKETCHER on
+24GNB-0809: 8388616kb used against an 8589934592b request — the whole allocation and
+8 KB more. Note the task exits **1**, not 137: the kernel refused the allocation rather
+than OOM-killing anything, so nothing in the exit status says "memory".
+
+Where the limit comes from: Bactopia's `conf/base.config` sets `withLabel: process_low`
+to `memory = 8.GB * task.attempt`, and **a label selector beats the generic
+`process { memory = ... }` in our config files regardless of file order**. So every
+`process_low` task gets 8 GB no matter what the site config's default says; only a
+`withName:` override changes it. `SKETCHER` runs `mash screen` against the ~1 GB
+RefSeq88 database and sits right at that line, so tasks land either side of it and a
+batch dies at random on whichever sample crosses — `scripts/nextflow.*.all_tools.config`
+now give it 16 GB, escalating to 32 GB on retry.
+
+The retry has to be declared in that `withName:` block: the global rule only retries
+exit 125/126/255, so an exit-1 memory failure terminates the batch, and `afterok` then
+kills FimTyper and consolidation behind it.
+
+If this recurs on a *different* process, check that process's label the same way before
+assuming the node is at fault.
