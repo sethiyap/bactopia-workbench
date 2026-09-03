@@ -96,6 +96,8 @@ Rules the builder applies to each `*_R1` file in the input directory:
   or submission fails with `Missing R2`.
 - `r1` = the R1 path, `r2` = the R2 path, `extra` is empty.
 - Optional `INCLUDE_SAMPLE_REGEX` filters which sample prefixes are included.
+- Several R1 files sharing a prefix (one sample split across lanes) become a
+  single `merge-pe` row — see below.
 
 Because the sample name is taken up to the first `_`, keep the meaningful
 identifier before the first underscore. In an AGRF delivery the sample id
@@ -111,6 +113,38 @@ sample	runtype	r1	r2	extra
 > Note: each row ends with a trailing tab — the empty `extra` field. Here
 > `r1`/`r2` hold absolute paths and `extra` is empty; the sample id `24GNB-1307`
 > is what must match the metadata `Sample name` column.
+
+### Lane-split samples become one `merge-pe` row
+
+AGRF sometimes spreads one sample over several lanes of the same flowcell:
+
+```text
+24GNB-1068_22YWYNLT3_CTGAATTAGT-AATTCGATCG_L001_R1.fastq.gz
+24GNB-1068_22YWYNLT3_CTGAATTAGT-AATTCGATCG_L002_R1.fastq.gz
+...
+24GNB-1068_22YWYNLT3_CTGAATTAGT-AATTCGATCG_L005_R1.fastq.gz
+```
+
+All five share the sample name `24GNB-1068`, and Bactopia needs one row per
+sample. The builder emits a single row of runtype `merge-pe` whose `r1` and `r2`
+are comma-separated lists in matching order; Bactopia concatenates them in its
+GATHER step, so the sample is assembled once from all its lanes:
+
+```text
+sample	runtype	r1	r2	extra
+24GNB-1068	merge-pe	/…_L001_R1.fastq.gz,/…_L002_R1.fastq.gz	/…_L001_R2.fastq.gz,/…_L002_R2.fastq.gz	
+```
+
+Notes:
+
+- The builder prints which samples were merged and from which files.
+- Bactopia calls multi-read-set merging experimental and logs a warning for it.
+- Samples with one read pair are unaffected and stay `paired-end`.
+- `MERGE_LANE_SPLIT_SAMPLES=0` disables merging: each pair gets its own row, and
+  validation then fails with `Duplicate sample rows`, naming the samples. Use it
+  when the extra pairs are a re-delivery you want to resolve by hand rather than
+  a lane split you want concatenated.
+- The input-read coverage flag (`coverage_x`) sums every lane of a merged sample.
 
 ### Non-AGAR Illumina naming
 
