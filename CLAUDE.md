@@ -248,3 +248,29 @@ Pre-stage images for any tool beyond `DEFAULT_TOOLS_STRING` before running them 
 Gadi. `ADDITIONAL_TOOLS_STRING` (`RUN_ADDITIONAL_TOOLS=1`) pulls in ten tools whose
 images are not otherwise cached — that is the difference between a run that works
 and one that does not, not the input read type.
+
+## Illumina FOFN `r1`/`r2` can hold comma-separated lists (`merge-pe`)
+
+One sample split across lanes (AGRF delivers `..._L001_R1.fastq.gz` through
+`..._L005_R1.fastq.gz` for a single isolate) gives several read pairs sharing one
+sample name — the name is the basename up to the first underscore. Bactopia requires
+one row per sample, so `scripts/2_create_fofn_bactopia.sh` folds them into a single
+row of runtype **`merge-pe`** whose `r1` and `r2` are comma-separated lists.
+Bactopia's own `process_fofn` (`lib/nf/bactopia.nf`) splits those on `,` and GATHER
+concatenates them, so the sample is assembled once from all its lanes. Merging is on
+by default; `MERGE_LANE_SPLIT_SAMPLES=0` restores one row per pair, which validation
+then rejects as duplicate sample rows (naming the samples) — the right setting when
+the extra pairs are a re-delivery to resolve by hand rather than a lane split.
+
+The consequence for the rest of the repo: **an Illumina FOFN field is not always a
+single path.** Anything reading `r1`/`r2` must split on `,` first. Already done in:
+
+- `scripts/validate_bactopia_fofn.sh` — accepts `merge-pe` for illumina, checks every
+  path in both lists, and rejects a row whose `r1` and `r2` lists differ in length
+  (Bactopia pairs them by position, so a mismatch would silently pair wrong mates).
+- `scripts/run_bactopia_batch.pbs` — the `coverage_summary.tsv` loop sums basepairs
+  over every lane, not just the first. (`run_bactopia_batch.slurm` has no coverage
+  block at all — a pre-existing gap, not related to merging.)
+
+Consumers that only read the `sample` column (`split_bactopia_samplesheet.sh`, the
+`EXCLUDE_SAMPLE_REGEX` filter, `validate_metadata_samples.py`) need no change.
