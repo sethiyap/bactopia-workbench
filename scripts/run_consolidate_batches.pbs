@@ -40,3 +40,24 @@ Rscript "$CONSOLIDATE_SCRIPT" \
   --results-root "$RESULTS_ROOT" \
   --batch-prefix "$BATCH_PREFIX" \
   --output-dir "$CONSOLIDATED_OUTDIR"
+
+# Collect per-sample task failures from every stage's Nextflow trace into the
+# consolidated directory, where map_samplesheet_results.R picks them up as the
+# `failed_steps` / `failure_reason` columns. Per-sample tool modules carry
+# errorStrategy 'ignore' (see nextflow.*.all_tools.config), so without this a failed
+# sample is indistinguishable from one the tool simply had nothing to say about.
+#
+# Runs after consolidation because it writes into CONSOLIDATED_OUTDIR, and is
+# strictly best-effort: this is diagnostics, and it must never fail a consolidation
+# that otherwise succeeded.
+FAILURES_SCRIPT=${FAILURES_SCRIPT:-${BASE_DIR:-$PWD}/scripts/collect_pipeline_failures.py}
+FAILURES_PYTHON=${FAILURES_PYTHON:-python3}
+if [[ -f "$FAILURES_SCRIPT" ]]; then
+  if ! "$FAILURES_PYTHON" "$FAILURES_SCRIPT" \
+      --results-root "$RESULTS_ROOT" \
+      --output "${CONSOLIDATED_OUTDIR}/pipeline_failures.tsv"; then
+    echo "WARNING: collecting pipeline failures failed; results will not carry failure reasons." >&2
+  fi
+else
+  echo "WARNING: collect_pipeline_failures.py not found: $FAILURES_SCRIPT (results will not carry failure reasons)" >&2
+fi

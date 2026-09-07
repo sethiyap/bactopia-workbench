@@ -166,7 +166,14 @@ def main() -> int:
         mapped_path = choose_mapped_results(results_root)
         add_sheet(workbook, used_names, mapped_sheet_name(mapped_path), read_table(mapped_path))
 
-        for top_level in ("project_summary.tsv", "tool_processing_log.tsv"):
+        # pipeline_failures.tsv is written by scripts/collect_pipeline_failures.py at
+        # the end of consolidation: one row per per-sample task that failed and was
+        # ignored, with the error pulled out of the task's .command.err. The mapped
+        # sheet carries a per-sample summary of it (failed_steps / failure_reason);
+        # this sheet keeps the detail -- stage, process, exit status and work dir --
+        # for anyone who needs to go and look at the task itself.
+        for top_level in ("project_summary.tsv", "tool_processing_log.tsv",
+                          "pipeline_failures.tsv"):
             path = consolidated_dir / top_level
             if path.exists():
                 add_sheet(workbook, used_names, path.stem, read_table(path))
