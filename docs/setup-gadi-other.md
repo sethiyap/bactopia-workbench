@@ -117,3 +117,14 @@ Validate config, inputs, and dependencies without submitting jobs:
 Fix anything it flags (a common one is `DATASETS_CACHE` not found — download it,
 step 4). Then run the real submission using the universal command on the main
 [README](../README.md#running-the-pipeline).
+
+## 8. Moving Data In And Out (RDS)
+
+Restoring raw reads from RDS and archiving results back are separate `copyq`
+jobs, not part of a submission → [gadi-rds-transfer.md](gadi-rds-transfer.md).
+
+Both PBS files carry `#PBS -P rg42` and `#PBS -l storage=gdata/rg42+scratch/rg42`,
+so on your project you must pass `-P <proj>` and `-l storage=...` on the `qsub`
+command line — they override the in-file directives. The
+[Non-rg42 projects](gadi-rds-transfer.md#non-rg42-projects) section has both
+directions written out.

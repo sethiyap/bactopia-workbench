@@ -174,6 +174,11 @@ the main page.
 After the run finishes on Gadi, use the packaged upload helper. The recommended
 pattern is `export ...` followed by `qsub -V`.
 
+> Full reference for both transfer directions — every variable, the upload
+> manifest, authentication, and troubleshooting —
+> [docs/gadi-rds-transfer.md](gadi-rds-transfer.md). The examples below are the
+> rg42-specific short form.
+
 This is safer than `qsub -v` when you need to pass larger environment values
 such as long include lists.
 

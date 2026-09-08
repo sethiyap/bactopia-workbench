@@ -302,6 +302,11 @@ This covers both Gadi deployments:
   install Bactopia + datasets and write your site config →
   [docs/setup-gadi-other.md](docs/setup-gadi-other.md)
 
+**Data transfer (Gadi ↔ RDS)** — moving raw reads in from RDS before a run, and
+results back out after one, are separate `copyq` jobs, not part of a pipeline
+submission. Both directions work from any NCI project →
+[docs/gadi-rds-transfer.md](docs/gadi-rds-transfer.md)
+
 ### 2. Slurm submission — `submit slurm`
 
 For a **non-Gadi Linux cluster with a working Slurm scheduler**. Jobs are
@@ -1313,6 +1318,7 @@ first. See [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md#inode-warnings-on-g
 Setup guides by submission mode (see [Submission Modes](#submission-modes)):
 
 - PBS (`submit gadi`): [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md) (shared rg42) and [docs/setup-gadi-other.md](docs/setup-gadi-other.md) (other Gadi project)
+- PBS data transfer (Gadi ↔ RDS, any NCI project): [docs/gadi-rds-transfer.md](docs/gadi-rds-transfer.md)
 - Slurm (`submit slurm`): [docs/setup-non-gadi.md](docs/setup-non-gadi.md)
 - Local (`submit local`, Linux host / Firefly): [docs/setup-non-gadi.md → local backend](docs/setup-non-gadi.md#no-scheduler-use-the-local-backend)
 
