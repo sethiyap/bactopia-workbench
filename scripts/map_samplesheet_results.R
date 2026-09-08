@@ -975,6 +975,67 @@ find_coverage_summary <- function(root) {
   dat[keep]
 }
 
+# Per-sample task failures collected from the Nextflow traces by
+# scripts/collect_pipeline_failures.py (run at the end of consolidation). Per-sample
+# tool modules carry errorStrategy 'ignore', so a sample whose CheckM died and a
+# sample CheckM simply had nothing to say about both arrive here with empty checkm_
+# columns. These two columns are what tells them apart.
+#
+# Read with quote = "" deliberately: tool errors contain quotes -- CheckM's pplacer
+# fails with Sys_error("Input/output error") -- and both read.delim and readr::read_tsv
+# would otherwise consume them and mangle the message. collect_pipeline_failures.py
+# writes the file unquoted and tab-free for exactly this reason.
+find_pipeline_failures <- function(root) {
+  path <- file.path(root, "pipeline_failures.tsv")
+  if (!file.exists(path)) {
+    return(NULL)
+  }
+  dat <- tryCatch(
+    utils::read.delim(path, check.names = FALSE, stringsAsFactors = FALSE,
+                      quote = "", comment.char = ""),
+    error = function(e) NULL
+  )
+  if (is.null(dat) || !nrow(dat) || !"sample" %in% names(dat)) {
+    return(NULL)
+  }
+  dat$sample <- trimws(as.character(dat$sample))
+  label <- if ("tool" %in% names(dat)) trimws(as.character(dat$tool)) else ""
+  blank_label <- !nzchar(label)
+  if (any(blank_label) && "process" %in% names(dat)) {
+    label[blank_label] <- tolower(trimws(as.character(dat$process)))[blank_label]
+  }
+  dat$.label <- label
+  dat$.reason <- if ("failure_reason" %in% names(dat)) {
+    trimws(as.character(dat$failure_reason))
+  } else {
+    rep("", nrow(dat))
+  }
+  dat <- dat[nzchar(dat$sample) & nzchar(dat$.label), , drop = FALSE]
+  if (!nrow(dat)) {
+    return(NULL)
+  }
+
+  by_sample <- split(dat, dat$sample)
+  data.frame(
+    sample = names(by_sample),
+    failed_steps = vapply(by_sample, function(rows) {
+      paste(sort(unique(rows$.label)), collapse = ", ")
+    }, character(1)),
+    # One "<tool>: <reason>" per failed tool. A tool that failed for several samples
+    # can fail for different reasons, so the reason is not deduplicated across tools.
+    failure_reason = vapply(by_sample, function(rows) {
+      parts <- vapply(sort(unique(rows$.label)), function(lbl) {
+        reasons <- unique(rows$.reason[rows$.label == lbl])
+        reasons <- reasons[nzchar(reasons)]
+        if (!length(reasons)) lbl else paste0(lbl, ": ", reasons[[1L]])
+      }, character(1))
+      paste(parts, collapse = " | ")
+    }, character(1)),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+}
+
 merged <- result_samples
 merged <- left_join_base(merged, agrf, by = "sample")
 if (!"Sample name" %in% names(merged)) {
@@ -990,6 +1051,7 @@ merged <- left_join_base(merged, plasmidfinder, by = "sample")
 merged <- left_join_base(merged, bracken, by = "sample")
 merged <- left_join_base(merged, padloc, by = "sample")
 merged <- left_join_base(merged, find_coverage_summary(consolidated_dir), by = "sample")
+merged <- left_join_base(merged, find_pipeline_failures(consolidated_dir), by = "sample")
 merged <- flag_review_columns(merged)
 
 preferred_order <- c(
@@ -1034,6 +1096,10 @@ preferred_order <- c(
 # Review/QC columns always sit at the very end of the sheet, after every tool
 # block. `coverage_x` / `low_coverage` are the input-read coverage flag joined from
 # the consolidated coverage_summary.tsv (present only when that table exists).
+# `failed_steps` / `failure_reason` name the tools whose task failed for that sample
+# and why, joined from the consolidated pipeline_failures.tsv. Per-sample tool modules
+# are ignored on failure rather than terminating the batch, so these two columns are
+# the only thing separating "the tool failed here" from "the tool found nothing".
 # `mlst_review_note` is appended downstream by run_review_mlst_from_tsv.sh (already
 # last there); it is listed for robustness in case it ever reaches this stage. These
 # are excluded from tool grouping so, e.g., `mlst_canonical_genus` does not fold into
@@ -1043,6 +1109,8 @@ review_tail_cols <- c(
   "review_reason",
   "coverage_x",
   "low_coverage",
+  "failed_steps",
+  "failure_reason",
   "mlst_canonical_genus",
   "phenotype_canonical_genus",
   "mlst_review_note"
