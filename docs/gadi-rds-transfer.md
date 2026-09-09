@@ -109,6 +109,10 @@ cd /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
 md5sum -c checksums.md5 2>&1 | tee md5check.log
 ```
 
+Everything here assumes GNU coreutils, which is what Gadi has. macOS ships no
+`md5sum` and its `md5` cannot verify a manifest at all; `md5 -r <file>` only
+prints one hash in the same `<hash>  <path>` layout.
+
 For a large delivery, `--quiet` prints only the failures:
 
 ```bash
@@ -169,15 +173,14 @@ thing — it will not detect a silently substituted file, but it does catch ever
 truncated one:
 
 ```bash
-find . -name '*.fastq.gz' -size 0            # zero-byte files
-find . -name '*.fastq.gz' -size -1000c       # absurdly small (bytes, not blocks)
-find . -name '*.fastq.gz' -print0 | xargs -0 -P 4 -n 1 gzip -t
+find . -name '*.fastq.gz' -size 0                                  # instant triage
+find . -name '*.fastq.gz' -print0 | xargs -0 -P 4 -n 1 gzip -t     # thorough
 ```
 
-`gzip -t` prints nothing for a good file, so any output is a problem — a
-truncated download reports `unexpected end of file`. Use the `c` (bytes) suffix
-for the size checks: `-size -1k` rounds every non-empty file up to one block, so
-it silently means the same thing as `-size 0`.
+`gzip -t` prints nothing for a good file, so any output is a problem; a truncated
+or zero-byte download reports `unexpected end of file`. It decompresses every
+byte, so on a large delivery run it as a job — see below. The `-size 0` sweep is
+only a fast first look at what `gzip -t` would find anyway.
 
 ### Do this off the login node
 
@@ -188,28 +191,36 @@ on `copyq` alongside the transfer:
 ```bash
 qsub -P <proj> -q copyq -l walltime=2:00:00,ncpus=1,mem=8GB \
   -l storage=gdata/<proj>+scratch/<proj> \
-  -o /scratch/<proj>/$USER/transfer_logs -e /scratch/<proj>/$USER/transfer_logs \
-  -- /bin/bash -c 'cd /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir> && md5sum -c checksums.md5'
+  -o /scratch/<proj>/$USER/transfer_logs -e /scratch/<proj>/$USER/transfer_logs <<'EOF'
+cd /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
+md5sum -c checksums.md5
+EOF
 ```
 
+Passing the script on stdin avoids quoting the whole command into `qsub --`.
 Never let `-o`/`-e` default to the submission directory — see
 [Troubleshooting](#troubleshooting).
 
 ### The other direction (Gadi → RDS)
 
 The upload manifest records *which files were sent*, not their hashes, so it will
-happily mark a truncated upload as done. To check an archive, generate a manifest
-before the upload and verify it after restoring:
+happily mark a truncated upload as done. Nothing generates an archive manifest for
+you either, so make one before the upload:
 
 ```bash
 # on Gadi, before archiving
 cd "$SRC_PATH"
-find . -type f ! -path './_work/*' -print0 \
-  | sort -z | xargs -0 md5sum > /scratch/<proj>/$USER/transfer_logs/archive.md5
+find . -type f ! -path './_work/*' ! -name archive.md5 -print0 \
+  | sort -z | xargs -0 md5sum > archive.md5
 ```
 
-On macOS there is no `md5sum`; use `md5 -r <file>`, which prints the same
-`<hash>  <path>` layout.
+Write it **inside** `$SRC_PATH` so the upload carries it along — a manifest left
+on `/scratch` is no use once the run is only on RDS. `! -name archive.md5` keeps
+it out of its own listing, since the shell creates the file before `find` runs.
+`_work` is excluded to match the uploader's own `RDS_EXCLUDE_DIRS` default.
+
+Verify from the restored copy the same way as a delivery: `cd` into it and
+`md5sum -c archive.md5`.
 
 ## Check the raw data against the metadata sheet
 
@@ -275,32 +286,6 @@ Exit status is **0** when clean or only warnings, **1** when there are errors,
 By default a sheet row with no reads is a *warning*, not an error: an AGAR sheet
 routinely covers more samples than any one delivery contains. Use `--strict` when
 the sheet is meant to describe exactly this delivery.
-
-### Two more checks worth running
-
-The script already covers both of these; they are here for a quick look without
-it. Set `RAW_DIR` to the delivery directory first.
-
-Both mates present for every pair — `2_create_fofn_bactopia.sh` aborts on a
-missing R2, so catching it here saves a failed submission:
-
-```bash
-RAW_DIR=/scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
-
-for r1 in "$RAW_DIR"/*_R1.fastq.gz; do
-  r2=${r1/_R1.fastq.gz/_R2.fastq.gz}
-  [[ -f $r2 ]] || echo "missing R2: $(basename "$r1")"
-done
-```
-
-Lanes per sample — anything with more than one pair is lane-split and will be
-merged into a single `merge-pe` row. Confirm the counts are what the delivery note
-says, since a sample missing one of its lanes still looks fine:
-
-```bash
-find "$RAW_DIR" -maxdepth 1 -name '*_R1.fastq.gz' \
-  | xargs -n 1 basename | sed 's/_.*//' | sort | uniq -c | sort -rn | head -20
-```
 
 ## Gadi → RDS: archive results
 

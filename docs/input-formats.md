@@ -267,14 +267,15 @@ scripts/validate_raw_data_samples.py \
 
 It compares **both directions** and names what is missing on each side, plus
 missing R2 mates, zero-byte files, duplicate sample names, and which samples are
-lane-split. `--input-type ont|assembly` for the other input types; `--agar`
-applies the AGAR-mode include filter so controls are not reported as missing
-metadata. Exit 0 clean or warnings only, 1 on errors, 2 on a usage problem.
+lane-split. Use `--input-type ont|assembly` for the other input types, and
+`--help` or
+[gadi-rds-transfer.md](gadi-rds-transfer.md#check-the-raw-data-against-the-metadata-sheet)
+for the rest of the flags and a worked example.
 
 This is the only check that catches a **sheet row whose reads never arrived**.
 Check 2 below cannot: it starts from the FOFN, which such a sample never reaches.
 Left unnoticed, the sample is simply absent from the workbook with nothing to say
-why. See [gadi-rds-transfer.md](gadi-rds-transfer.md#check-the-raw-data-against-the-metadata-sheet).
+why.
 
 **2. Metadata covers every input sample** —
 [`scripts/validate_metadata_samples.py`](../scripts/validate_metadata_samples.py).
