@@ -221,8 +221,7 @@ The pipeline's own preflight (`scripts/validate_metadata_samples.py`, invoked fr
 `submit_workbench_pipeline.sh`) checks **one direction only**: every sample in the
 Bactopia input must appear in the sheet's `Sample name` column. A sample that is
 in the sheet but has **no reads on disk** passes validation silently, never enters
-the FOFN, and simply has no row in the final workbook. That is exactly what four
-missing FASTQ files look like downstream, so check both directions yourself.
+the FOFN, and simply has no row in the final workbook.
 
 ### `validate_raw_data_samples.py`
 
@@ -277,59 +276,17 @@ By default a sheet row with no reads is a *warning*, not an error: an AGAR sheet
 routinely covers more samples than any one delivery contains. Use `--strict` when
 the sheet is meant to describe exactly this delivery.
 
-### Doing it by hand
-
-The same comparison without the script, if you want to see the working. Sample
-names are derived the way `scripts/2_create_fofn_bactopia.sh` derives them: the
-FASTQ basename up to the **first underscore**.
-
-```bash
-RAW_DIR=/scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
-SHEET=/scratch/<proj>/<user>/metadata/<prefix>_samplesheet.txt
-WORK=/scratch/<proj>/$USER/transfer_logs
-
-# sample names that actually have reads on disk
-find "$RAW_DIR" -maxdepth 1 -type f \( -name '*_R1.fastq.gz' -o -name '*_R1.fq.gz' \) \
-  | xargs -n 1 basename | sed 's/_.*//' | sort -u > "$WORK/on_disk.txt"
-
-# sample names in the metadata sheet's "Sample name" column (TSV; strips BOM and CRs)
-sed $'1s/^\xef\xbb\xbf//; s/\r$//' "$SHEET" \
-  | awk -F'\t' '
-      NR==1 { for (i=1;i<=NF;i++) if (tolower($i)=="sample name") c=i;
-              if (!c) { print "No \"Sample name\" column found" > "/dev/stderr"; exit 1 }
-              next }
-      c && $c != "" { print $c }' \
-  | sort -u > "$WORK/in_sheet.txt"
-```
-
-If your sheet is a CSV rather than a TSV, change `-F'\t'` to `-F','` (the
-validator auto-detects the delimiter; this one-liner does not).
-
-Then compare:
-
-```bash
-echo "matched:            $(comm -12 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
-echo "reads with no row:  $(comm -23 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
-echo "rows with no reads: $(comm -13 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
-
-comm -23 "$WORK/on_disk.txt" "$WORK/in_sheet.txt"   # on disk, not in the sheet
-comm -13 "$WORK/on_disk.txt" "$WORK/in_sheet.txt"   # in the sheet, not on disk
-```
-
-- **On disk, not in the sheet** — `submit_workbench_pipeline.sh` will refuse to
-  submit (`Input samples missing from metadata 'Sample name' column`). Add the
-  rows, or exclude the samples with `EXCLUDE_SAMPLE_REGEX`.
-- **In the sheet, not on disk** — silently dropped. Either the reads never
-  arrived (cross-check against the md5 `FAILED open or read` list above), or the
-  sample belongs to a different delivery, or the name in the sheet does not match
-  the FASTQ prefix. Decide deliberately; nothing downstream will remind you.
-
 ### Two more checks worth running
+
+The script already covers both of these; they are here for a quick look without
+it. Set `RAW_DIR` to the delivery directory first.
 
 Both mates present for every pair — `2_create_fofn_bactopia.sh` aborts on a
 missing R2, so catching it here saves a failed submission:
 
 ```bash
+RAW_DIR=/scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
+
 for r1 in "$RAW_DIR"/*_R1.fastq.gz; do
   r2=${r1/_R1.fastq.gz/_R2.fastq.gz}
   [[ -f $r2 ]] || echo "missing R2: $(basename "$r1")"
