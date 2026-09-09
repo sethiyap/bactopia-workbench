@@ -224,8 +224,64 @@ in the sheet but has **no reads on disk** passes validation silently, never ente
 the FOFN, and simply has no row in the final workbook. That is exactly what four
 missing FASTQ files look like downstream, so check both directions yourself.
 
-Sample names are derived the same way `scripts/2_create_fofn_bactopia.sh` derives
-them: the FASTQ basename up to the **first underscore**.
+### `validate_raw_data_samples.py`
+
+`scripts/validate_raw_data_samples.py` does both directions and reports the
+missing names on each side. It needs nothing but Python 3 — run it on a login
+node, before submitting:
+
+```bash
+scripts/validate_raw_data_samples.py \
+  --raw-dir  /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir> \
+  --metadata /scratch/<proj>/<user>/metadata/<prefix>_samplesheet.txt \
+  --agar
+```
+
+```
+samples on disk:       4
+samples in sheet:      4
+matched:               3
+on disk, not in sheet: 1
+in sheet, not on disk: 1
+
+ERROR  on disk but not in the sheet -- submission will be refused (1)
+  25GNB-002  (25GNB-002_XXX_L001_R1.fastq.gz)
+
+WARNING  in the sheet but no reads on disk -- silently absent from the workbook (1)
+  27GNB-900
+
+ERROR  incomplete or ambiguous files (1)
+  missing R2 for 26GNB-77_QQQ_L001_R1.fastq.gz (expected 26GNB-77_QQQ_L001_R2.fastq.gz)
+```
+
+It derives sample names exactly as the pipeline does, so the comparison reflects
+what would really run — basename up to the first underscore for `illumina`, and
+the basename minus its extension for `--input-type ont` / `assembly`. It also
+reports missing R2 mates, zero-byte files, duplicate sample names (in the sheet,
+and on disk for ont/assembly), and which samples are lane-split into a single
+`merge-pe` row.
+
+| Flag | Purpose |
+|---|---|
+| `--input-type` | `illumina` (default), `ont`, `assembly` |
+| `--agar` | Apply the AGAR-mode include filter, `^[0-9]{2}GNB-[0-9]+R?$`, so controls and undetermined reads are not reported as missing metadata |
+| `--include-regex` / `--exclude-regex` | Default to `$INCLUDE_SAMPLE_REGEX` / `$EXCLUDE_SAMPLE_REGEX`, so the report matches what the submission will filter |
+| `--strict` | Treat sheet rows with no reads as an error rather than a warning |
+| `--json <path>` | Write the full result as JSON as well |
+| `--max-list` | Names printed per section (default 40) |
+
+Exit status is **0** when clean or only warnings, **1** when there are errors,
+**2** on a usage or IO problem — so it drops straight into a submission wrapper.
+
+By default a sheet row with no reads is a *warning*, not an error: an AGAR sheet
+routinely covers more samples than any one delivery contains. Use `--strict` when
+the sheet is meant to describe exactly this delivery.
+
+### Doing it by hand
+
+The same comparison without the script, if you want to see the working. Sample
+names are derived the way `scripts/2_create_fofn_bactopia.sh` derives them: the
+FASTQ basename up to the **first underscore**.
 
 ```bash
 RAW_DIR=/scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>

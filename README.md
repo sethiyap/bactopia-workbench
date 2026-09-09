@@ -1306,6 +1306,7 @@ first. See [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md#inode-warnings-on-g
 - `scripts/`: helper scripts and job wrappers
 - `scripts/create_bactopia_input.sh`: builds the ONT/assembly FOFN from an input directory
 - `scripts/validate_metadata_samples.py`: checks every input sample exists in the metadata sheet
+- `scripts/validate_raw_data_samples.py`: pre-flight cross-check of the raw data folder against the metadata sheet, both directions
 - `scripts/download_bactopia_datasets.sh`: downloads the custom datasets into `DATASETS_CACHE` on demand
 - `scripts/download_kraken2_db.sh`: find-or-download a Kraken2/Bracken database into `KRAKEN2_DB`
 - `scripts/install_optional_local_tools.sh`: installs a local mlst/seqkit env and ST131Typer

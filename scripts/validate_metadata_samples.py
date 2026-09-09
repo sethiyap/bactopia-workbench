@@ -12,7 +12,12 @@ def normalize_sample(value: str) -> str:
     return re.sub(r"\.(?:fna|fa|fasta)(?:\.gz)?$", "", value, flags=re.IGNORECASE)
 
 
-def read_metadata_samples(path: Path) -> set[str]:
+def read_metadata_sample_rows(path: Path) -> list[tuple[int, str]]:
+    """Sample names from the sheet as (line number, name), in file order.
+
+    Duplicates are preserved: callers that only need membership fold them away,
+    while validate_raw_data_samples.py reports them.
+    """
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         first_line = handle.readline()
         if not first_line:
@@ -26,11 +31,15 @@ def read_metadata_samples(path: Path) -> set[str]:
 
     headers = [re.sub(r"\s+", " ", item.strip()).lower() for item in rows[0]]
     sample_index = headers.index("sample name") if "sample name" in headers else 0
-    samples = {
-        normalize_sample(row[sample_index])
-        for row in rows[1:]
+    return [
+        (line_number, normalize_sample(row[sample_index]))
+        for line_number, row in enumerate(rows[1:], start=2)
         if len(row) > sample_index and normalize_sample(row[sample_index])
-    }
+    ]
+
+
+def read_metadata_samples(path: Path) -> set[str]:
+    samples = {name for _, name in read_metadata_sample_rows(path)}
     if not samples:
         raise ValueError(f"Metadata sheet contains no sample names: {path}")
     return samples

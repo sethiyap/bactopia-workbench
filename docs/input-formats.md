@@ -252,10 +252,33 @@ The launcher splits the list into batches and passes each batch to Bactopia via
 
 ## Validating Before You Submit
 
-Two checks are worth running before a real submission.
+Four checks are worth running before a real submission.
 
-**1. Metadata covers every input sample** —
-[`scripts/validate_metadata_samples.py`](../scripts/validate_metadata_samples.py):
+**1. The raw folder and the metadata sheet agree** —
+[`scripts/validate_raw_data_samples.py`](../scripts/validate_raw_data_samples.py).
+Run this first: it works on the raw data directory, before a FOFN exists.
+
+```bash
+scripts/validate_raw_data_samples.py \
+  --raw-dir  /path/to/raw_data/2025/B07/<delivery_dir> \
+  --metadata /path/to/B07_samplesheet.txt \
+  --agar
+```
+
+It compares **both directions** and names what is missing on each side, plus
+missing R2 mates, zero-byte files, duplicate sample names, and which samples are
+lane-split. `--input-type ont|assembly` for the other input types; `--agar`
+applies the AGAR-mode include filter so controls are not reported as missing
+metadata. Exit 0 clean or warnings only, 1 on errors, 2 on a usage problem.
+
+This is the only check that catches a **sheet row whose reads never arrived**.
+Check 2 below cannot: it starts from the FOFN, which such a sample never reaches.
+Left unnoticed, the sample is simply absent from the workbook with nothing to say
+why. See [gadi-rds-transfer.md](gadi-rds-transfer.md#check-the-raw-data-against-the-metadata-sheet).
+
+**2. Metadata covers every input sample** —
+[`scripts/validate_metadata_samples.py`](../scripts/validate_metadata_samples.py).
+This is the check the launcher runs for you at submission:
 
 ```bash
 python3 scripts/validate_metadata_samples.py \
@@ -266,12 +289,14 @@ python3 scripts/validate_metadata_samples.py \
 
 For accession input, pass the accession list as `--input` with
 `--input-type accession`. The check fails if any input sample is missing from
-the metadata `Sample name` column.
+the metadata `Sample name` column. It is one-directional by design — a sheet row
+with no input is not an error here, because a sheet routinely covers more samples
+than one delivery.
 
-**2. FOFN structure** — [`scripts/validate_bactopia_fofn.sh`](../scripts/validate_bactopia_fofn.sh)
+**3. FOFN structure** — [`scripts/validate_bactopia_fofn.sh`](../scripts/validate_bactopia_fofn.sh)
 checks the manifest is well formed.
 
-**3. Full dry run** — the launcher's own `--dry-run` validates config,
+**4. Full dry run** — the launcher's own `--dry-run` validates config,
 metadata, FOFN handling, and key dependencies without submitting jobs:
 
 ```bash
