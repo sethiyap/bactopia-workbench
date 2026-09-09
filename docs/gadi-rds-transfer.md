@@ -21,6 +21,8 @@ in their `#PBS` directives and you have to override them at submission.
 
 - [Before you start](#before-you-start)
 - [RDS → Gadi: restore data](#rds--gadi-restore-data)
+- [Verify the transfer with md5sums](#verify-the-transfer-with-md5sums)
+- [Check the raw data against the metadata sheet](#check-the-raw-data-against-the-metadata-sheet)
 - [Gadi → RDS: archive results](#gadi--rds-archive-results)
 - [Non-rg42 projects](#non-rg42-projects)
 - [Authentication](#authentication)
@@ -85,6 +87,207 @@ Useful behaviour:
 - `DEBUG_LOG_DIR` defaults to `logs/` **in the directory you submitted from**.
   If you submit from `$HOME`, set it explicitly:
   `DEBUG_LOG_DIR=/scratch/<proj>/$USER/transfer_logs`.
+
+A job that exits 0 means `sftp` reported no error, not that the data is complete.
+Before submitting a pipeline run, work through
+[Verify the transfer with md5sums](#verify-the-transfer-with-md5sums) and
+[Check the raw data against the metadata sheet](#check-the-raw-data-against-the-metadata-sheet).
+
+## Verify the transfer with md5sums
+
+**Nothing in this repo checks checksums for you.** The transfer scripts confirm
+that `sftp` reported success, not that the bytes are intact and complete. Do this
+by hand after every restore, before building the FOFN.
+
+AGRF ships a checksum manifest with each delivery (`checksums.md5`,
+`*_checksums.txt`, or similar). The paths inside it are **relative**, so you must
+run `md5sum -c` from the directory those paths are relative to — usually the
+delivery directory itself:
+
+```bash
+cd /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
+md5sum -c checksums.md5 2>&1 | tee md5check.log
+```
+
+For a large delivery, `--quiet` prints only the failures:
+
+```bash
+md5sum --quiet -c checksums.md5
+```
+
+Then confirm the count matches what the manifest promised — a clean `--quiet` run
+proves nothing if only three of 400 files were even looked at:
+
+```bash
+wc -l < checksums.md5                        # files the manifest expects
+grep -c ': OK$'               md5check.log   # verified
+grep -c ': FAILED$'           md5check.log   # present, but hash differs
+grep -c 'FAILED open or read' md5check.log   # not there at all
+```
+
+The first number must equal the sum of the other three. Keep `2>&1` on the
+`tee` — the `No such file or directory` and `WARNING:` lines go to **stderr**,
+and without it they scroll past while the log looks clean.
+
+### Reading the output
+
+The two failure modes look similar and mean completely different things:
+
+| Line | Meaning | What to do |
+|---|---|---|
+| `<file>: OK` | hash matched | nothing |
+| `<file>: FAILED` | file is present, hash **differs** | corrupt or truncated — re-transfer that file |
+| `<file>: FAILED open or read` | file **is not there** | no comparison happened; see below |
+
+`FAILED open or read` plus the trailing `WARNING: N listed files could not be
+read` means the manifest names files that are not in the directory you ran from.
+Nothing is corrupt. In order of likelihood: you ran from the wrong directory; the
+delivery is genuinely incomplete; or the files arrived under different names.
+Check before assuming a re-transfer is needed:
+
+```bash
+find /scratch/<proj>/<user>/raw_data -name '23GNB-1538*' -o -name '24GNB-411*'
+```
+
+If both mates of a sample are missing together, that is a per-sample drop rather
+than random truncation. If only some lanes are missing (`_L001_` absent while
+`_L002_`…`_L005_` are present), the sample will still reach the FOFN as
+`merge-pe` and be assembled from fewer reads than intended, with no warning at
+all — see [input-formats.md](input-formats.md).
+
+To verify only the files that did arrive, and deal with the absent ones
+separately:
+
+```bash
+md5sum -c --ignore-missing checksums.md5
+```
+
+### Catch truncated files without a manifest
+
+If a delivery came without checksums, gzip's own integrity check is the next best
+thing — it will not detect a silently substituted file, but it does catch every
+truncated one:
+
+```bash
+find . -name '*.fastq.gz' -size 0            # zero-byte files
+find . -name '*.fastq.gz' -size -1000c       # absurdly small (bytes, not blocks)
+find . -name '*.fastq.gz' -print0 | xargs -0 -P 4 -n 1 gzip -t
+```
+
+`gzip -t` prints nothing for a good file, so any output is a problem — a
+truncated download reports `unexpected end of file`. Use the `c` (bytes) suffix
+for the size checks: `-size -1k` rounds every non-empty file up to one block, so
+it silently means the same thing as `-size 0`.
+
+### Do this off the login node
+
+Hashing a whole delivery is IO- and CPU-heavy, and Gadi login nodes kill
+long-running processes. For anything more than a handful of files, run the check
+on `copyq` alongside the transfer:
+
+```bash
+qsub -P <proj> -q copyq -l walltime=2:00:00,ncpus=1,mem=8GB \
+  -l storage=gdata/<proj>+scratch/<proj> \
+  -o /scratch/<proj>/$USER/transfer_logs -e /scratch/<proj>/$USER/transfer_logs \
+  -- /bin/bash -c 'cd /scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir> && md5sum -c checksums.md5'
+```
+
+Never let `-o`/`-e` default to the submission directory — see
+[Troubleshooting](#troubleshooting).
+
+### The other direction (Gadi → RDS)
+
+The upload manifest records *which files were sent*, not their hashes, so it will
+happily mark a truncated upload as done. To check an archive, generate a manifest
+before the upload and verify it after restoring:
+
+```bash
+# on Gadi, before archiving
+cd "$SRC_PATH"
+find . -type f ! -path './_work/*' -print0 \
+  | sort -z | xargs -0 md5sum > /scratch/<proj>/$USER/transfer_logs/archive.md5
+```
+
+On macOS there is no `md5sum`; use `md5 -r <file>`, which prints the same
+`<hash>  <path>` layout.
+
+## Check the raw data against the metadata sheet
+
+Checksums prove the files are intact. They say nothing about whether the files on
+disk are the samples the metadata sheet describes. Run this before
+`submit_workbench_pipeline.sh`.
+
+The pipeline's own preflight (`scripts/validate_metadata_samples.py`, invoked from
+`submit_workbench_pipeline.sh`) checks **one direction only**: every sample in the
+Bactopia input must appear in the sheet's `Sample name` column. A sample that is
+in the sheet but has **no reads on disk** passes validation silently, never enters
+the FOFN, and simply has no row in the final workbook. That is exactly what four
+missing FASTQ files look like downstream, so check both directions yourself.
+
+Sample names are derived the same way `scripts/2_create_fofn_bactopia.sh` derives
+them: the FASTQ basename up to the **first underscore**.
+
+```bash
+RAW_DIR=/scratch/<proj>/<user>/raw_data/2025/B07/<delivery_dir>
+SHEET=/scratch/<proj>/<user>/metadata/<prefix>_samplesheet.txt
+WORK=/scratch/<proj>/$USER/transfer_logs
+
+# sample names that actually have reads on disk
+find "$RAW_DIR" -maxdepth 1 -type f \( -name '*_R1.fastq.gz' -o -name '*_R1.fq.gz' \) \
+  | xargs -n 1 basename | sed 's/_.*//' | sort -u > "$WORK/on_disk.txt"
+
+# sample names in the metadata sheet's "Sample name" column (TSV; strips BOM and CRs)
+sed $'1s/^\xef\xbb\xbf//; s/\r$//' "$SHEET" \
+  | awk -F'\t' '
+      NR==1 { for (i=1;i<=NF;i++) if (tolower($i)=="sample name") c=i;
+              if (!c) { print "No \"Sample name\" column found" > "/dev/stderr"; exit 1 }
+              next }
+      c && $c != "" { print $c }' \
+  | sort -u > "$WORK/in_sheet.txt"
+```
+
+If your sheet is a CSV rather than a TSV, change `-F'\t'` to `-F','` (the
+validator auto-detects the delimiter; this one-liner does not).
+
+Then compare:
+
+```bash
+echo "matched:            $(comm -12 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
+echo "reads with no row:  $(comm -23 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
+echo "rows with no reads: $(comm -13 "$WORK/on_disk.txt" "$WORK/in_sheet.txt" | wc -l)"
+
+comm -23 "$WORK/on_disk.txt" "$WORK/in_sheet.txt"   # on disk, not in the sheet
+comm -13 "$WORK/on_disk.txt" "$WORK/in_sheet.txt"   # in the sheet, not on disk
+```
+
+- **On disk, not in the sheet** — `submit_workbench_pipeline.sh` will refuse to
+  submit (`Input samples missing from metadata 'Sample name' column`). Add the
+  rows, or exclude the samples with `EXCLUDE_SAMPLE_REGEX`.
+- **In the sheet, not on disk** — silently dropped. Either the reads never
+  arrived (cross-check against the md5 `FAILED open or read` list above), or the
+  sample belongs to a different delivery, or the name in the sheet does not match
+  the FASTQ prefix. Decide deliberately; nothing downstream will remind you.
+
+### Two more checks worth running
+
+Both mates present for every pair — `2_create_fofn_bactopia.sh` aborts on a
+missing R2, so catching it here saves a failed submission:
+
+```bash
+for r1 in "$RAW_DIR"/*_R1.fastq.gz; do
+  r2=${r1/_R1.fastq.gz/_R2.fastq.gz}
+  [[ -f $r2 ]] || echo "missing R2: $(basename "$r1")"
+done
+```
+
+Lanes per sample — anything with more than one pair is lane-split and will be
+merged into a single `merge-pe` row. Confirm the counts are what the delivery note
+says, since a sample missing one of its lanes still looks fine:
+
+```bash
+find "$RAW_DIR" -maxdepth 1 -name '*_R1.fastq.gz' \
+  | xargs -n 1 basename | sed 's/_.*//' | sort | uniq -c | sort -rn | head -20
+```
 
 ## Gadi → RDS: archive results
 
