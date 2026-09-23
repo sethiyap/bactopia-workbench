@@ -286,7 +286,7 @@ def plan(fastq_dir: Path, mapping: dict[str, str]) -> tuple[list[tuple[Path, Pat
     directory half-converted.
     """
     renames: list[tuple[Path, Path, str, str]] = []
-    counts = {"checked": 0, "already": 0, "skipped": 0}
+    counts = {"checked": 0, "already": 0, "skipped": 0, "orphans": 0}
     seen_mates: dict[str, set[str]] = {}
 
     for path in sorted(fastq_dir.iterdir()):
@@ -320,10 +320,31 @@ def plan(fastq_dir: Path, mapping: dict[str, str]) -> tuple[list[tuple[Path, Pat
             raise SystemExit(f"Refusing to rename: target already exists: {target.name}")
 
         seen_mates.setdefault(sample, set()).add(matched.group("read"))
-        renames.append((path, target, isolate, new_sample))
+        renames.append((path, target, isolate, new_sample, sample))
+
+    # A half pair is a problem with the delivery, not with renaming: the orphan
+    # sits in the directory either way, so refusing the whole run would block
+    # every healthy sample without fixing anything. Skip it and say so -- one
+    # renamed mate with its partner left behind is the worse outcome.
+    orphans = {s for s, reads in seen_mates.items() if reads != {"1", "2"}}
+    if orphans:
+        kept = []
+        for entry in renames:
+            sample = entry[4]
+            if sample in orphans:
+                missing = ({"1", "2"} - seen_mates[sample]).pop()
+                print(
+                    f"SKIP     {entry[0].name}\n         '{sample}' has no R{missing}"
+                    " -- renaming one mate would strand the pair"
+                )
+                counts["skipped"] += 1
+                counts["orphans"] += 1
+            else:
+                kept.append(entry)
+        renames = kept
 
     targets: dict[Path, Path] = {}
-    for source, target, _, _ in renames:
+    for source, target, _, _, _ in renames:
         if target in targets:
             raise SystemExit(
                 f"Refusing to rename: {targets[target].name} and {source.name} "
@@ -331,13 +352,7 @@ def plan(fastq_dir: Path, mapping: dict[str, str]) -> tuple[list[tuple[Path, Pat
             )
         targets[target] = source
 
-    # The FOFN builder fails on a missing R2, so catch it here rather than at submission.
-    for sample, reads in sorted(seen_mates.items()):
-        if reads != {"1", "2"}:
-            missing = ({"1", "2"} - reads).pop()
-            raise SystemExit(f"Refusing to rename: {sample} has no R{missing}")
-
-    return renames, counts
+    return [entry[:4] for entry in renames], counts
 
 
 def list_columns_mode() -> int:
@@ -414,12 +429,16 @@ def main() -> int:
             )
             print(f"RENAME   {source.name} -> {target.name}")
 
+    half_pairs = (
+        f"\n  of which half pairs: {counts['orphans']}" if counts["orphans"] else ""
+    )
     print(
         f"\nSheet:      {args.sheet.name}"
         f"\nChecked:    {counts['checked']}"
         f"\n{'Renamed:   ' if args.apply else 'To rename: '} {len(renames)}"
         f"\nAlready ok: {counts['already']}"
         f"\nSkipped:    {counts['skipped']}"
+        f"{half_pairs}"
         f"\nMap file:   {map_file}"
     )
     if not args.apply and renames:

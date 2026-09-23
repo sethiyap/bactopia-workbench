@@ -248,7 +248,6 @@ The script refuses to rename anything, rather than doing it partially, when:
   into one assembly);
 - an AGAR id does not match `^[0-9]{2}GNB-[0-9]+R?$`, and so would be dropped by
   the FOFN filter anyway (`--allow-nonstandard` overrides this);
-- a sample is missing its R2 mate, which would fail FOFN creation later;
 - the target filename already exists;
 - two source files would become the same name (e.g. both `20-005-0004_R1.fq.gz`
   and `20-005-0004.merged_R1.fq.gz` present), which would otherwise destroy one.
@@ -278,6 +277,24 @@ sheet has an error worth fixing — the warning says the rename was unambiguous
 
 Rows that are exact duplicates (same isolate, same AGAR id) are deduplicated
 silently; only conflicting rows are reported.
+
+#### Half pairs are skipped, not fatal
+
+A FASTQ whose mate is missing is reported and left alone, and the rest of the
+batch proceeds:
+
+```text
+SKIP     20-005-0201_trimmed.paired_R2.fastq.gz
+         '20-005-0201_trimmed.paired' has no R1 -- renaming one mate would strand the pair
+```
+
+The count appears in the summary as `of which half pairs`. This is a problem
+with the delivery rather than with renaming — the orphan sits in the directory
+whether or not anything is renamed, so blocking every healthy sample would fix
+nothing. Leaving it unrenamed keeps its non-AGAR name, so the AGAR FOFN filter
+excludes it and FOFN creation still succeeds. Track down the missing mate
+separately; `validate_raw_data_samples.py` reports missing R2 mates across the
+whole directory.
 
 AGRF-layout files (`<sample>_<flowcell>_<barcode>_L001_R1.fastq.gz`) are skipped —
 those belong to
