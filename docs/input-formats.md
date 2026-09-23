@@ -153,6 +153,105 @@ Notes:
 - If you supply your own `samplesheet.fofn`, its `sample` values are used as-is.
 - Either way, metadata `Sample name` values must match the final FOFN samples.
 
+### Legacy names: renaming FASTQs from an isolate → AGAR sheet
+
+Data collected before the AGAR naming convention carries a **local isolate id**
+(`20-005-0004_R1.fq.gz`) instead of an AGAR sample id, so it fails the AGAR
+pattern `^[0-9]{2}GNB-[0-9]+R?$`.
+
+This fails **silently**. In AGAR mode the launcher filters the FOFN on that
+pattern, so those samples are dropped from the batch, and
+`normalize_agar_fastq_sample_names.sh` exits 0 while reporting them `INVALID` —
+nothing fails, the samples simply are not there. AGAR mode is detected from the
+path (`*/AGAR/*`, `*/AGRF_*/*`, …), so this happens without anyone turning it on.
+
+[`scripts/rename_fastq_from_sheet.py`](../scripts/rename_fastq_from_sheet.py)
+renames the files from a sheet that maps each isolate id to its AGAR id.
+
+#### What the sheet needs
+
+Two columns: the isolate id the **files are currently named after**, and the AGAR
+id they should become. Anything else (organism, site, dates) is ignored.
+
+```text
+Sample	Isolate	Organism
+19GNB-0004	20-005-0004	Enterobacter cloacae complex / Enterobacter hormaechei
+19GNB-0007	20-005-0005	Enterobacter cloacae complex / Enterobacter hormaechei
+19GNB-0016	20-005-0006	Klebsiella pneumoniae
+```
+
+Here `Isolate` matches `20-005-0004_R1.fq.gz` on disk and `Sample` is the AGAR id
+it becomes. `.tsv`, `.csv`, `.txt` and `.xlsx` are all read; the delimiter and
+header matching follow the same rules as the metadata sheet above, so headings
+are case- and whitespace-insensitive.
+
+Column titles are detected automatically — `Isolate`, `Isolate ID`, `Lab Number`
+and similar for the isolate side; `Sample`, `AGAR ID`, `AGAR Accession` and
+similar for the AGAR side. When detection misses, name them explicitly:
+
+```bash
+scripts/rename_fastq_from_sheet.py sheet.txt <fastq_dir> \
+  --from-col Isolate --to-col Sample
+```
+
+`scripts/rename_fastq_from_sheet.py sheet.txt --list-columns` prints the column
+titles the script actually sees.
+
+#### Running it
+
+It is a **dry run by default** — nothing moves until you pass `--apply`.
+
+```bash
+# 1. See what would change
+scripts/rename_fastq_from_sheet.py /path/to/samplesheet.txt /path/to/raw_data
+
+# 2. Do it
+scripts/rename_fastq_from_sheet.py /path/to/samplesheet.txt /path/to/raw_data --apply
+```
+
+```text
+Resolved 3 id pairs from samplesheet.txt ['isolate' -> 'sample']
+
+RENAME   20-005-0004_R1.fq.gz -> 19GNB-0004_R1.fq.gz
+RENAME   20-005-0004_R2.fq.gz -> 19GNB-0004_R2.fq.gz
+```
+
+Every run writes `fastq_rename_map.tsv` beside the FASTQs recording each
+`old → new` pair, so a rename can be reversed. Re-running after `--apply` is
+safe: already-AGAR names are counted as `Already ok` and left alone.
+
+#### Nothing is guessed
+
+An AGAR id cannot be derived from a local isolate id — in the example above
+`20-005-0004` becomes `19GNB-0004`, and even the year prefix differs. The sheet
+is the only source. A FASTQ whose isolate id is **not in the sheet** is reported
+and skipped, never renamed by inference.
+
+The script refuses to rename anything, rather than doing it partially, when:
+
+- one isolate id maps to two different AGAR ids;
+- two isolate ids map to the same AGAR id (this would merge distinct isolates
+  into one assembly);
+- an AGAR id does not match `^[0-9]{2}GNB-[0-9]+R?$`, and so would be dropped by
+  the FOFN filter anyway (`--allow-nonstandard` overrides this);
+- a sample is missing its R2 mate, which would fail FOFN creation later;
+- the target filename already exists.
+
+AGRF-layout files (`<sample>_<flowcell>_<barcode>_L001_R1.fastq.gz`) are skipped —
+those belong to
+[`scripts/normalize_agar_fastq_sample_names.sh`](../scripts/normalize_agar_fastq_sample_names.sh).
+
+#### Two things to check afterwards
+
+- **Reading `.xlsx` needs `openpyxl`**, which lives in `MLST_ENV` rather than the
+  system python. Run it as `$MLST_ENV/bin/python3 scripts/rename_fastq_from_sheet.py …`,
+  or export the sheet to `.tsv`. `.tsv`/`.csv` need nothing extra.
+- **The metadata sheet must use the same AGAR ids.** Renaming the FASTQs fixes
+  the FOFN, but results are joined on metadata `Sample name`. If that column
+  still holds the old isolate ids, the run completes with unmapped samples.
+  Confirm with `validate_raw_data_samples.py` (see
+  [Validating Before You Submit](#validating-before-you-submit)) after renaming.
+
 ## ONT FOFN — `samplesheet.ont.fofn`
 
 `runtype` is `ont`. Built by
@@ -315,6 +414,10 @@ metadata, FOFN handling, and key dependencies without submitting jobs:
 - **Sample name mismatch**: FOFN sample names must exactly match metadata
   `Sample name` values (after FASTA-suffix stripping). This is the most common
   cause of dropped or unmapped samples.
+- **Legacy isolate ids in AGAR mode**: FASTQs named after a pre-convention
+  isolate id (`20-005-0004_R1.fq.gz`) are silently filtered out of the FOFN, with
+  nothing reporting a failure. Rename them first — see
+  [Legacy names](#legacy-names-renaming-fastqs-from-an-isolate--agar-sheet).
 - **Lost tabs**: FOFN files are strictly tab-delimited. Editing in a tool that
   converts tabs to spaces will break parsing — prefer `printf` or a
   tab-preserving editor.
