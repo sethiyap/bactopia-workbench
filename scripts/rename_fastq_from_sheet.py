@@ -183,16 +183,23 @@ def build_mapping(path: Path, from_col: str | None,
 
 
 def lookup_names(sample: str):
-    """The sample as written, then with trailing .<suffix> parts peeled off.
+    """The sample as written, then with trailing suffix tokens peeled off.
 
     Deliveries carry processing suffixes between the isolate id and the read
-    tag (20-005-0069.merged_R1.fastq.gz), which the sheet does not list. The
-    exact name is tried first so a sheet that does list one still wins.
+    tag, separated by either character and sometimes both at once:
+    20-005-0069.merged_R1.fastq.gz, 20-005-0175_trimmed.paired_R1.fastq.gz.
+    The sheet lists neither. Longest first, so the exact name wins and an
+    isolate id that itself contains "_" or "." matches before it is over-peeled.
+
+    Hyphens are never peeled -- they separate the parts of the isolate id.
     """
     yield sample
     stem = sample
-    while "." in stem:
-        stem = stem.rsplit(".", 1)[0]
+    while True:
+        cut = re.search(r"[._][^._]*$", stem)
+        if not cut:
+            return
+        stem = stem[: cut.start()]
         yield stem
 
 

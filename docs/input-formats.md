@@ -181,11 +181,21 @@ Sample	Isolate	Organism
 ```
 
 Here `Isolate` matches `20-005-0004_R1.fq.gz` on disk and `Sample` is the AGAR id
-it becomes. A processing suffix between the isolate id and the read tag is
-tolerated and dropped — `20-005-0004.merged_R1.fastq.gz` also resolves to isolate
-`20-005-0004` and becomes `19GNB-0004_R1.fastq.gz`, since a suffix like `.merged`
-would not survive the AGAR pattern. A sheet that lists the suffixed name
-explicitly still takes precedence. `.tsv`, `.csv`, `.txt` and `.xlsx` are all read; the delimiter and
+it becomes.
+
+Processing suffixes between the isolate id and the read tag are tolerated and
+dropped, whether separated by `.` or `_`:
+
+```text
+20-005-0004.merged_R1.fastq.gz          -> 19GNB-0004_R1.fastq.gz
+20-005-0175_trimmed.paired_R1.fastq.gz  -> 19GNB-0175_R1.fastq.gz
+```
+
+A suffix cannot be kept: `19GNB-0004.merged` would fail the AGAR pattern exactly
+as the original name did. Candidates are tried longest first, so a sheet that
+lists the suffixed name explicitly wins, and an isolate id that itself contains
+`_` or `.` matches before it is over-peeled. Hyphens are never stripped — they
+separate the parts of the isolate id. `.tsv`, `.csv`, `.txt` and `.xlsx` are all read; the delimiter and
 header matching follow the same rules as the metadata sheet above, so headings
 are case- and whitespace-insensitive.
 
