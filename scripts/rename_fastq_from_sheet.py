@@ -125,9 +125,15 @@ def resolve_column(headers: list[str], wanted: str | None, candidates, role: str
     )
 
 
-def build_mapping(path: Path, from_col: str | None, to_col: str | None,
-                  allow_nonstandard: bool) -> dict[str, str]:
-    """isolate id -> AGAR id, refusing any sheet that cannot be applied safely."""
+def build_mapping(path: Path, from_col: str | None,
+                  to_col: str | None) -> tuple[dict[str, str], list[tuple]]:
+    """isolate id -> AGAR id, plus whatever is wrong with the sheet.
+
+    Problems are returned rather than raised: a sheet spanning a whole year
+    describes isolates that are not in the directory being renamed, and a bad
+    row for an isolate with no reads here is not this batch's problem. main()
+    decides what is fatal once it knows which isolates actually have files.
+    """
     rows = read_rows(path)
     if not rows:
         raise SystemExit(f"Sheet has no usable rows: {path}")
@@ -139,10 +145,8 @@ def build_mapping(path: Path, from_col: str | None, to_col: str | None,
         raise SystemExit("The isolate-id and agar-id columns must be different.")
 
     mapping: dict[str, str] = {}
-    reverse: dict[str, str] = {}
-    conflicts: list[str] = []
-    collisions: list[str] = []
-    malformed: list[str] = []
+    assignments: dict[str, list[tuple[int, str]]] = {}
+    claims: dict[str, list[tuple[int, str]]] = {}
 
     for line_number, row in enumerate(rows[1:], start=2):
         if len(row) <= max(from_idx, to_idx):
@@ -151,34 +155,23 @@ def build_mapping(path: Path, from_col: str | None, to_col: str | None,
         new = str(row[to_idx]).strip()
         if not old or not new:
             continue
+        assignments.setdefault(old, []).append((line_number, new))
+        claims.setdefault(new, []).append((line_number, old))
+        mapping.setdefault(old, new)
 
-        # One isolate with two AGAR ids is unresolvable; two isolates sharing one
-        # AGAR id would merge distinct samples into a single assembly.
-        if old in mapping and mapping[old] != new:
-            conflicts.append(f"  line {line_number}: {old} -> {new} (already {mapping[old]})")
-            continue
-        if new in reverse and reverse[new] != old:
-            collisions.append(f"  line {line_number}: {old} and {reverse[new]} both -> {new}")
-            continue
-        if not AGAR_SAMPLE_REGEX.match(new):
-            malformed.append(f"  line {line_number}: {old} -> {new}")
+    issues: list[tuple] = []
+    for isolate, entries in assignments.items():
+        if len({agar for _, agar in entries}) > 1:
+            # Ambiguous: drop it so it can never be renamed by accident.
+            mapping.pop(isolate, None)
+            issues.append(("conflict", isolate, entries))
+    for agar, entries in claims.items():
+        if len({isolate for _, isolate in entries}) > 1:
+            issues.append(("collision", agar, entries))
+    for isolate, agar in mapping.items():
+        if not AGAR_SAMPLE_REGEX.match(agar):
+            issues.append(("malformed", isolate, agar))
 
-        mapping[old] = new
-        reverse[new] = old
-
-    problems = []
-    if conflicts:
-        problems.append("One isolate id maps to more than one AGAR id:\n" + "\n".join(conflicts))
-    if collisions:
-        problems.append("Two isolate ids map to the same AGAR id:\n" + "\n".join(collisions))
-    if malformed and not allow_nonstandard:
-        problems.append(
-            "These AGAR ids do not match ^[0-9]{2}GNB-[0-9]+R?$ and would be "
-            "dropped by the AGAR FOFN filter:\n" + "\n".join(malformed)
-            + "\nFix the sheet, or pass --allow-nonstandard."
-        )
-    if problems:
-        raise SystemExit("\n\n".join(problems))
     if not mapping:
         raise SystemExit(f"No usable id pairs found in: {path}")
 
@@ -186,7 +179,76 @@ def build_mapping(path: Path, from_col: str | None, to_col: str | None,
         f"Resolved {len(mapping)} id pairs from {path.name} "
         f"[{headers[from_idx]!r} -> {headers[to_idx]!r}]"
     )
-    return mapping
+    return mapping, issues
+
+
+def present_isolates(fastq_dir: Path) -> set[str]:
+    """Sample names of the renameable FASTQs in the directory."""
+    names = set()
+    for path in fastq_dir.iterdir():
+        if not path.is_file() or not path.name.endswith((".fastq.gz", ".fq.gz")):
+            continue
+        if AGRF_REGEX.match(path.name):
+            continue
+        matched = PAIR_REGEX.match(path.name)
+        if matched:
+            names.add(matched.group("sample"))
+    return names
+
+
+def triage(issues: list[tuple], present: set[str],
+           allow_nonstandard: bool) -> tuple[list[str], list[str], dict[str, str], int]:
+    """Split sheet problems into fatal, warned and irrelevant for this directory."""
+    fatal: list[str] = []
+    warned: list[str] = []
+    notes: dict[str, str] = {}
+    elsewhere = 0
+
+    for issue in issues:
+        kind = issue[0]
+        if kind == "conflict":
+            isolate, entries = issue[1], issue[2]
+            detail = ", ".join(f"line {n}: {agar}" for n, agar in entries)
+            if isolate in present:
+                fatal.append(f"  {isolate} has reads here but two AGAR ids ({detail})")
+            else:
+                elsewhere += 1
+
+        elif kind == "collision":
+            agar, entries = issue[1], issue[2]
+            isolates = sorted({isolate for _, isolate in entries})
+            here = [isolate for isolate in isolates if isolate in present]
+            detail = ", ".join(f"line {n}: {isolate}" for n, isolate in entries)
+            if len(here) > 1:
+                fatal.append(
+                    f"  {agar} is claimed by {len(here)} isolates that both have "
+                    f"reads here: {', '.join(here)} ({detail})"
+                )
+            elif here:
+                other = [i for i in isolates if i not in present]
+                warned.append(
+                    f"  {agar} is contested in the sheet ({detail}); only "
+                    f"{here[0]} has reads here, so it takes the name. "
+                    f"No reads for: {', '.join(other)}"
+                )
+                notes[here[0]] = f"contested {agar}; also claimed by {','.join(other)}"
+            else:
+                elsewhere += 1
+
+        elif kind == "malformed":
+            isolate, agar = issue[1], issue[2]
+            if isolate not in present:
+                elsewhere += 1
+            elif allow_nonstandard:
+                warned.append(f"  {isolate} -> {agar} does not match the AGAR pattern")
+                notes[isolate] = f"nonstandard AGAR id {agar}"
+            else:
+                fatal.append(
+                    f"  {isolate} -> {agar} does not match ^[0-9]{{2}}GNB-[0-9]+R?$ "
+                    "and would be dropped by the AGAR FOFN filter"
+                )
+
+    return fatal, warned, notes, elsewhere
 
 
 def plan(fastq_dir: Path, mapping: dict[str, str]) -> tuple[list[tuple[Path, Path, str, str]], dict[str, int]]:
@@ -281,19 +343,38 @@ def main() -> int:
     if not args.fastq_dir.is_dir():
         raise SystemExit(f"Directory not found: {args.fastq_dir}")
 
-    mapping = build_mapping(args.sheet, args.from_col, args.to_col, args.allow_nonstandard)
+    mapping, issues = build_mapping(args.sheet, args.from_col, args.to_col)
+    fatal, warned, notes, elsewhere = triage(
+        issues, present_isolates(args.fastq_dir), args.allow_nonstandard
+    )
+    if elsewhere:
+        print(f"Ignored {elsewhere} sheet problem(s) affecting isolates with no reads here.")
+    if warned:
+        print("\nWARNING -- renaming anyway, recorded in the map file:")
+        print("\n".join(warned))
+    if fatal:
+        raise SystemExit(
+            "\nRefusing to rename. These sheet problems affect files in this "
+            "directory:\n" + "\n".join(fatal) + "\n\nFix the sheet, or move these "
+            "samples aside and rename the rest."
+        )
+
     renames, counts = plan(args.fastq_dir, mapping)
 
     map_file = args.map_file or args.fastq_dir / "fastq_rename_map.tsv"
     status = "RENAMED" if args.apply else "PLANNED"
     print()
     with map_file.open("w", encoding="utf-8") as handle:
-        handle.write("status\tsheet\toriginal_filename\tfinal_filename\toriginal_sample\tfinal_sample\n")
+        handle.write(
+            "status\tsheet\toriginal_filename\tfinal_filename\toriginal_sample"
+            "\tfinal_sample\tnote\n"
+        )
         for source, target, old_sample, new_sample in renames:
             if args.apply:
                 source.rename(target)
             handle.write(
-                f"{status}\t{args.sheet.name}\t{source.name}\t{target.name}\t{old_sample}\t{new_sample}\n"
+                f"{status}\t{args.sheet.name}\t{source.name}\t{target.name}"
+                f"\t{old_sample}\t{new_sample}\t{notes.get(old_sample, '')}\n"
             )
             print(f"RENAME   {source.name} -> {target.name}")
 

@@ -237,6 +237,32 @@ The script refuses to rename anything, rather than doing it partially, when:
 - a sample is missing its R2 mate, which would fail FOFN creation later;
 - the target filename already exists.
 
+**These checks apply to the isolates that have reads in the directory**, not to
+the whole sheet. A year's sheet describes isolates from many deliveries, and a
+bad row for an isolate with no FASTQs here cannot affect this batch — those are
+counted and otherwise ignored:
+
+```text
+Ignored 3 sheet problem(s) affecting isolates with no reads here.
+```
+
+Where an AGAR id is contested in the sheet but only **one** of the claiming
+isolates has reads here, that isolate takes the name and the rename is flagged:
+
+```text
+WARNING -- renaming anyway, recorded in the map file:
+  19GNB-0416 is contested in the sheet (line 57: 20-005-0059, line 372: 20-005-0415);
+  only 20-005-0059 has reads here, so it takes the name. No reads for: 20-005-0415
+```
+
+The warning is also written to the `note` column of `fastq_rename_map.tsv`, so a
+contested rename stays auditable after the fact. A contested id still means the
+sheet has an error worth fixing — the warning says the rename was unambiguous
+*for the files present*, not that the sheet is right.
+
+Rows that are exact duplicates (same isolate, same AGAR id) are deduplicated
+silently; only conflicting rows are reported.
+
 AGRF-layout files (`<sample>_<flowcell>_<barcode>_L001_R1.fastq.gz`) are skipped —
 those belong to
 [`scripts/normalize_agar_fastq_sample_names.sh`](../scripts/normalize_agar_fastq_sample_names.sh).
