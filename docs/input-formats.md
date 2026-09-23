@@ -181,7 +181,11 @@ Sample	Isolate	Organism
 ```
 
 Here `Isolate` matches `20-005-0004_R1.fq.gz` on disk and `Sample` is the AGAR id
-it becomes. `.tsv`, `.csv`, `.txt` and `.xlsx` are all read; the delimiter and
+it becomes. A processing suffix between the isolate id and the read tag is
+tolerated and dropped — `20-005-0004.merged_R1.fastq.gz` also resolves to isolate
+`20-005-0004` and becomes `19GNB-0004_R1.fastq.gz`, since a suffix like `.merged`
+would not survive the AGAR pattern. A sheet that lists the suffixed name
+explicitly still takes precedence. `.tsv`, `.csv`, `.txt` and `.xlsx` are all read; the delimiter and
 header matching follow the same rules as the metadata sheet above, so headings
 are case- and whitespace-insensitive.
 
@@ -235,7 +239,9 @@ The script refuses to rename anything, rather than doing it partially, when:
 - an AGAR id does not match `^[0-9]{2}GNB-[0-9]+R?$`, and so would be dropped by
   the FOFN filter anyway (`--allow-nonstandard` overrides this);
 - a sample is missing its R2 mate, which would fail FOFN creation later;
-- the target filename already exists.
+- the target filename already exists;
+- two source files would become the same name (e.g. both `20-005-0004_R1.fq.gz`
+  and `20-005-0004.merged_R1.fq.gz` present), which would otherwise destroy one.
 
 **These checks apply to the isolates that have reads in the directory**, not to
 the whole sheet. A year's sheet describes isolates from many deliveries, and a

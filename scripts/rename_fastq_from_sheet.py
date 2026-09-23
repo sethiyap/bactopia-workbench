@@ -182,6 +182,27 @@ def build_mapping(path: Path, from_col: str | None,
     return mapping, issues
 
 
+def lookup_names(sample: str):
+    """The sample as written, then with trailing .<suffix> parts peeled off.
+
+    Deliveries carry processing suffixes between the isolate id and the read
+    tag (20-005-0069.merged_R1.fastq.gz), which the sheet does not list. The
+    exact name is tried first so a sheet that does list one still wins.
+    """
+    yield sample
+    stem = sample
+    while "." in stem:
+        stem = stem.rsplit(".", 1)[0]
+        yield stem
+
+
+def resolve_sample(sample: str, mapping: dict[str, str]):
+    for candidate in lookup_names(sample):
+        if candidate in mapping:
+            return candidate, mapping[candidate]
+    return None, None
+
+
 def present_isolates(fastq_dir: Path) -> set[str]:
     """Sample names of the renameable FASTQs in the directory."""
     names = set()
@@ -192,7 +213,7 @@ def present_isolates(fastq_dir: Path) -> set[str]:
             continue
         matched = PAIR_REGEX.match(path.name)
         if matched:
-            names.add(matched.group("sample"))
+            names.update(lookup_names(matched.group("sample")))
     return names
 
 
@@ -282,18 +303,26 @@ def plan(fastq_dir: Path, mapping: dict[str, str]) -> tuple[list[tuple[Path, Pat
             counts["already"] += 1
             continue
 
-        if sample not in mapping:
+        isolate, new_sample = resolve_sample(sample, mapping)
+        if new_sample is None:
             print(f"SKIP     {path.name}\n         '{sample}' has no entry in the sheet")
             counts["skipped"] += 1
             continue
-
-        new_sample = mapping[sample]
         target = path.with_name(f"{new_sample}_R{matched.group('read')}.{matched.group('ext')}.gz")
         if target.exists() and target != path:
             raise SystemExit(f"Refusing to rename: target already exists: {target.name}")
 
         seen_mates.setdefault(sample, set()).add(matched.group("read"))
-        renames.append((path, target, sample, new_sample))
+        renames.append((path, target, isolate, new_sample))
+
+    targets: dict[Path, Path] = {}
+    for source, target, _, _ in renames:
+        if target in targets:
+            raise SystemExit(
+                f"Refusing to rename: {targets[target].name} and {source.name} "
+                f"would both become {target.name}"
+            )
+        targets[target] = source
 
     # The FOFN builder fails on a missing R2, so catch it here rather than at submission.
     for sample, reads in sorted(seen_mates.items()):
