@@ -49,6 +49,23 @@ def normalize_header(value: object) -> str:
     return re.sub(r"\s+", " ", str(value).strip()).lower()
 
 
+def _binary_hint(path: Path) -> str:
+    """Name the usual culprit when a 'sheet' turns out to be binary."""
+    if re.match(r"^\..+\.sw[a-p]$", path.name):
+        return (
+            f"\nThat is a Vim swap file, not the sheet itself. Pass the real "
+            f"sheet instead, e.g. {path.parent / path.name[1:-4]}\n"
+            "(its presence also means the file is open in Vim, or Vim left the "
+            "swap behind after a crash)."
+        )
+    if path.suffix.lower() in (".xls", ".ods"):
+        return (
+            f"\n{path.suffix} is not supported. Save it as .xlsx, or export to "
+            ".tsv and pass that."
+        )
+    return "\nPass a .tsv, .csv, .txt or .xlsx sheet."
+
+
 def read_rows(path: Path) -> list[list[str]]:
     """Every non-blank row of the sheet as strings, header row included."""
     if path.suffix.lower() in (".xlsx", ".xlsm"):
@@ -69,15 +86,23 @@ def read_rows(path: Path) -> list[list[str]]:
         finally:
             workbook.close()
     else:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            first_line = handle.readline()
-            if not first_line:
-                raise SystemExit(f"Sheet is empty: {path}")
-            # Same sniff as validate_metadata_samples.py: a tab anywhere in the
-            # header line means tab-delimited, otherwise comma.
-            delimiter = "\t" if "\t" in first_line else ","
-            handle.seek(0)
-            rows = list(csv.reader(handle, delimiter=delimiter))
+        try:
+            with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                first_line = handle.readline()
+                if not first_line:
+                    raise SystemExit(f"Sheet is empty: {path}")
+                # Same sniff as validate_metadata_samples.py: a tab anywhere in
+                # the header line means tab-delimited, otherwise comma.
+                delimiter = "\t" if "\t" in first_line else ","
+                handle.seek(0)
+                rows = list(csv.reader(handle, delimiter=delimiter))
+        except UnicodeDecodeError as error:
+            # Easily hit by tab-completing onto an editor swap file, which sits
+            # next to the sheet and is binary. A traceback here helps nobody.
+            raise SystemExit(
+                f"{path} is not readable as text ({error.reason} at byte "
+                f"{error.start}).{_binary_hint(path)}"
+            ) from None
 
     return [row for row in rows if any(str(cell).strip() for cell in row)]
 
