@@ -170,14 +170,6 @@ echo
 [ -d "$src_fastq_dir" ] || fail "No such FASTQ directory: $src_fastq_dir"
 [ -f "$src_sheet" ]     || fail "No such samplesheet: $src_sheet"
 
-case "/$out_root/" in
-  */AGAR/*|*/PRJ-AGAR/*)
-    warn "OUT_ROOT contains an /AGAR/ path segment, so IS_AGAR_PROJECT=auto would"
-    warn "resolve to AGAR mode. Harmless here - 24GNB-* names pass the AGAR regex -"
-    warn "and the printed submit commands pass --is-agar-project 0 explicitly."
-    ;;
-esac
-
 if [ ! -d "$bactopia_pipeline" ]; then
   warn "BACTOPIA_PIPELINE not found: $bactopia_pipeline"
   warn "Container prestaging will be skipped. Set BACTOPIA_PIPELINE and re-run."
@@ -447,7 +439,6 @@ while [ "$set_i" -le "$n_sets" ]; do
 # --- trainee${set_i} ---
 ${training_clone}/bin/bactopia-workbench submit gadi \\
   --site-config ${site_config} \\
-  --is-agar-project 0 \\
   --dry-run \\
   ${out_root}/trainee${set_i}/fastq \\
   ${out_root}/trainee${set_i}/metadata \\
@@ -465,7 +456,6 @@ lever available without touching the FASTQs:
   EXTRA_ARGS_STRING='--coverage 40' \\
   ${training_clone}/bin/bactopia-workbench submit gadi \\
     --site-config ${site_config} \\
-    --is-agar-project 0 \\
     ${out_root}/trainee1/fastq \\
     ${out_root}/trainee1/metadata \\
     ${out_root}/trainee1/results \\
