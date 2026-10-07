@@ -3,8 +3,8 @@
 # setup_training_session.sh
 #
 # Prepare a bactopia-workbench training session on NCI Gadi: carve an existing
-# AGAR delivery into one input set per trainee, and build a shared, pre-populated
-# Singularity cache so no trainee's run dies pulling containers from a compute
+# AGAR delivery into one input set per user, and build a shared, pre-populated
+# Singularity cache so no user's run dies pulling containers from a compute
 # node.
 #
 # RUN THIS FROM A GADI LOGIN NODE. Compute nodes have no outbound internet, so
@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-# Group-writable: trainees run as themselves but write samplesheet.fofn into
+# Group-writable: users run as themselves but write samplesheet.fofn into
 # their metadata dir and results into their results dir, both created here.
 umask 0002
 
@@ -237,11 +237,11 @@ esac
 echo
 
 # --------------------------------------------------------------------------
-# Build the per-trainee sets.
+# Build the per-user sets.
 #
-# Each trainee gets their OWN metadata dir. samplesheet.fofn is created in
+# Each user gets their OWN metadata dir. samplesheet.fofn is created in
 # METADATA_DIR and reused if present, so a shared metadata dir would make
-# trainees silently inherit each other's batch list.
+# users silently inherit each other's batch list.
 #
 # FASTQs are hard-linked, never symlinked: the FOFN builder's `find -type f`
 # does not match symlinks, so a symlinked set yields an empty FOFN. Hard links
@@ -255,13 +255,13 @@ fi
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   mislabel=$(mislabel_for_set "$set_i")
-  set_root="$out_root/trainee${set_i}"
+  set_root="$out_root/user${set_i}"
   fq_dir="$set_root/fastq"
   md_dir="$set_root/metadata"
   res_dir="$set_root/results"
-  sheet="$md_dir/TR${set_i}_samplesheet.txt"
+  sheet="$md_dir/U${set_i}_samplesheet.txt"
 
-  log "trainee${set_i}:"
+  log "user${set_i}:"
   mkdirp "$fq_dir" "$md_dir" "$res_dir"
 
   # The header is mandatory, not cosmetic: row 1 is always skipped when the
@@ -293,7 +293,7 @@ while [ "$set_i" -le "$n_sets" ]; do
 
     if [ "$dry_run" -eq 0 ]; then
       printf '%s\t%s\n' "$s" "$sheet_org" >> "$sheet"
-      printf 'trainee%s\t%s\t%s\t%s\t%s\n' \
+      printf 'user%s\t%s\t%s\t%s\t%s\n' \
         "$set_i" "$s" "$sheet_org" "$true_org" "$note" >> "$answer_key"
     fi
     printf '    %-14s %-30s %s\n' "$s" "${sheet_org:-<blank>}" "$note"
@@ -313,8 +313,9 @@ echo
 # --------------------------------------------------------------------------
 # Shared Singularity cache.
 #
-# SING_CACHE defaults to a PER-USER path, so four trainees with empty caches
-# means four runs dying on container pulls that cannot work from a compute node
+# SING_CACHE defaults to a path under $USER, so four separate accounts each get
+# an empty cache, and four runs die on container pulls that cannot work from a
+# compute node
 # - and a failed pull leaves a 0-byte .img stub that poisons the cache for every
 # later run. Seeding from an already-populated cache is far faster and safer
 # than four fresh downloads.
@@ -411,7 +412,7 @@ Two manual steps this script deliberately does not do
    scheduler_submit (scripts/lib_scheduler.sh) passes only -o/-e/-m/-M/-N/-W/-v
    to qsub. There is NO hook for -q or -l walltime: resources are fixed in the
    #PBS headers. run_bactopia_batch.pbs asks for 24h and
-   run_extra_bactopia_tools.pbs for 48h, which is what will leave trainees
+   run_extra_bactopia_tools.pbs for 48h, which is what will leave users
    watching an empty queue while four samples wait to start.
 
      cd /g/data/rg42
@@ -428,7 +429,7 @@ Two manual steps this script deliberately does not do
    rebase onto PIPELINE_ROOT.
 
 =============================================================================
-What each trainee runs (dry run first)
+What each user runs (dry run first)
 =============================================================================
 NOTES
 
@@ -436,13 +437,13 @@ echo
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   cat <<EOF
-# --- trainee${set_i} ---
+# --- user${set_i} ---
 ${training_clone}/bin/bactopia-workbench submit gadi \\
   --site-config ${site_config} \\
   --dry-run \\
-  ${out_root}/trainee${set_i}/fastq \\
-  ${out_root}/trainee${set_i}/metadata \\
-  ${out_root}/trainee${set_i}/results \\
+  ${out_root}/user${set_i}/fastq \\
+  ${out_root}/user${set_i}/metadata \\
+  ${out_root}/user${set_i}/results \\
   4
 
 EOF
@@ -456,9 +457,9 @@ lever available without touching the FASTQs:
   EXTRA_ARGS_STRING='--coverage 40' \\
   ${training_clone}/bin/bactopia-workbench submit gadi \\
     --site-config ${site_config} \\
-    ${out_root}/trainee1/fastq \\
-    ${out_root}/trainee1/metadata \\
-    ${out_root}/trainee1/results \\
+    ${out_root}/user1/fastq \\
+    ${out_root}/user1/metadata \\
+    ${out_root}/user1/results \\
     4
 
 Leave --additional-tools off: it pulls in ten tools whose images are not cached.
