@@ -21,7 +21,7 @@
 #   BACTOPIA_PIPELINE  /g/data/rg42/bactopia/bactopia
 #   SEED_CACHE         /scratch/rg42/$USER/singularity_cache
 #   PROD_SITE_CONFIG   /g/data/rg42/bactopia-workbench/config/sites/gadi.local.env
-#   TRAINING_CLONE     /g/data/rg42/bactopia-workbench-training
+#   TRAINING_CLONE     /g/data/rg42/bactopia-workbench
 #   INJECT_MISMATCH    1   deliberately mislabel one organism per set
 #   SKIP_PRESTAGE      0   set to 1 to skip the container download step
 #   DRY_RUN            0   set to 1 to change nothing
@@ -46,7 +46,10 @@ out_root=${OUT_ROOT:-/scratch/${project}/training/$(date +%Y-%m-%d)}
 bactopia_pipeline=${BACTOPIA_PIPELINE:-/g/data/${project}/bactopia/bactopia}
 seed_cache=${SEED_CACHE:-/scratch/${project}/${USER:-unknown}/singularity_cache}
 prod_site_config=${PROD_SITE_CONFIG:-/g/data/${project}/bactopia-workbench/config/sites/gadi.local.env}
-training_clone=${TRAINING_CLONE:-/g/data/${project}/bactopia-workbench-training}
+# The install the printed submit commands point at. Defaults to the shared
+# production one, which is what most sessions will use. Point it at a separate
+# clone with shorter #PBS walltimes if queue wait is the binding constraint.
+training_clone=${TRAINING_CLONE:-/g/data/${project}/bactopia-workbench}
 inject_mismatch=${INJECT_MISMATCH:-1}
 skip_prestage=${SKIP_PRESTAGE:-0}
 dry_run=${DRY_RUN:-0}
@@ -408,25 +411,26 @@ cat <<'NOTES'
 Two manual steps this script deliberately does not do
 =============================================================================
 
-1. TRAINING CLONE WITH SHORTER WALLTIME.
-   scheduler_submit (scripts/lib_scheduler.sh) passes only -o/-e/-m/-M/-N/-W/-v
-   to qsub. There is NO hook for -q or -l walltime: resources are fixed in the
-   #PBS headers. run_bactopia_batch.pbs asks for 24h and
-   run_extra_bactopia_tools.pbs for 48h, which is what will leave users
-   watching an empty queue while four samples wait to start.
+1. REHEARSE ONE SET END TO END and time it. That number decides whether four
+   samples each is right, and it is the only way to know: nothing here can
+   predict a per-batch runtime.
 
-     cd /g/data/rg42
-     git clone https://github.com/sethiyap/bactopia-workbench.git \
-       bactopia-workbench-training
+2. OPTIONAL - SHORTEN THE WALLTIME if queue wait turns out to be the binding
+   constraint. scheduler_submit (scripts/lib_scheduler.sh) passes only
+   -o/-e/-m/-M/-N/-W/-v to qsub. There is NO hook for -q or -l walltime:
+   resources are fixed in the #PBS headers. run_bactopia_batch.pbs asks for 24h
+   and run_extra_bactopia_tools.pbs for 48h, and PBS schedules on the request
+   rather than the need, so four samples can sit behind a 24h reservation.
 
-   In the clone, reduce walltime in scripts/run_bactopia_batch.pbs (~4h) and
-   scripts/run_extra_bactopia_tools.pbs (~2h), and consider -q express.
-   Do not edit the shared production install.
+   That cannot be fixed without editing those headers, so do it in a copy
+   rather than in the shared install:
 
-2. REHEARSE ONE SET END TO END and time it. That number decides whether four
-   samples each is right. A rehearsal is also how you find out whether the
-   training clone's FIMTYPER_CONFIG resolves its container, since those paths
-   rebase onto PIPELINE_ROOT.
+     cp -a /g/data/rg42/bactopia-workbench /g/data/rg42/bactopia-workbench-short
+     # trim walltime in the copy's scripts/run_bactopia_batch.pbs (~4h)
+     # and scripts/run_extra_bactopia_tools.pbs (~2h)
+
+   Then re-run this script with TRAINING_CLONE=/g/data/rg42/bactopia-workbench-short
+   so the printed commands point at the copy.
 
 =============================================================================
 What each user runs (dry run first)
