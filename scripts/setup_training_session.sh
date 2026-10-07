@@ -3,18 +3,24 @@
 # setup_training_session.sh
 #
 # Prepare a bactopia-workbench training session on NCI Gadi: carve an existing
-# AGAR delivery into one input set per user, and build a shared, pre-populated
-# Singularity cache so no user's run dies pulling containers from a compute
-# node.
+# AGAR delivery into one input set per user, and pre-populate each user's own
+# Singularity cache so nobody's run dies pulling containers from a compute node.
+#
+# The goal is that users run the documented production command - three paths and
+# a batch size, no flags - so nothing here requires --site-config or SING_CACHE
+# on the command line.
 #
 # RUN THIS FROM A GADI LOGIN NODE. Compute nodes have no outbound internet, so
 # the container staging step cannot work anywhere else.
 #
-#   ./scripts/setup_training_session.sh              # build it
-#   DRY_RUN=1 ./scripts/setup_training_session.sh    # show what it would do
+#   USERS='abc123 def456 ghi789 jkl012' ./scripts/setup_training_session.sh
+#   DRY_RUN=1 USERS='...' ./scripts/setup_training_session.sh   # change nothing
 #
 # Defaults point at the 2024 B07 delivery. Override with env vars:
 #
+#   USERS              (none)  NCI usernames, space separated. Each one's own
+#                              default SING_CACHE is seeded by hard link, which
+#                              is what lets the submit command stay bare.
 #   SRC_FASTQ_DIR      /scratch/rg42/AGAR/raw_data/2024/B07/B07
 #   SRC_SHEET          /scratch/rg42/AGAR/metadata/2024/B07/B07_samplesheet.txt
 #   OUT_ROOT           /scratch/rg42/training/<today>
@@ -26,9 +32,8 @@
 #   SKIP_PRESTAGE      0   set to 1 to skip the container download step
 #   DRY_RUN            0   set to 1 to change nothing
 #
-# What it does NOT do: create the training clone of this repo, or shorten the
-# #PBS walltime headers. Both are deliberate manual steps - see the notes
-# printed at the end.
+# What it does NOT do: shorten the #PBS walltime headers. That needs a separate
+# copy of the install - see the notes printed at the end.
 
 set -euo pipefail
 
@@ -40,16 +45,20 @@ umask 0002
 # Configuration
 # --------------------------------------------------------------------------
 project=${PROJECT:-rg42}
-src_fastq_dir=${SRC_FASTQ_DIR:-/scratch/${project}/AGAR/raw_data/2024/B07/B07}
-src_sheet=${SRC_SHEET:-/scratch/${project}/AGAR/metadata/2024/B07/B07_samplesheet.txt}
-out_root=${OUT_ROOT:-/scratch/${project}/training/$(date +%Y-%m-%d)}
+scratch_root=${SCRATCH_ROOT:-/scratch}
+src_fastq_dir=${SRC_FASTQ_DIR:-${scratch_root}/${project}/AGAR/raw_data/2024/B07/B07}
+src_sheet=${SRC_SHEET:-${scratch_root}/${project}/AGAR/metadata/2024/B07/B07_samplesheet.txt}
+out_root=${OUT_ROOT:-${scratch_root}/${project}/training/$(date +%Y-%m-%d)}
 bactopia_pipeline=${BACTOPIA_PIPELINE:-/g/data/${project}/bactopia/bactopia}
-seed_cache=${SEED_CACHE:-/scratch/${project}/${USER:-unknown}/singularity_cache}
+seed_cache=${SEED_CACHE:-${scratch_root}/${project}/${USER:-unknown}/singularity_cache}
 prod_site_config=${PROD_SITE_CONFIG:-/g/data/${project}/bactopia-workbench/config/sites/gadi.local.env}
 # The install the printed submit commands point at. Defaults to the shared
 # production one, which is what most sessions will use. Point it at a separate
 # clone with shorter #PBS walltimes if queue wait is the binding constraint.
 training_clone=${TRAINING_CLONE:-/g/data/${project}/bactopia-workbench}
+# NCI usernames of the people running the session, space separated. Each one's
+# own default SING_CACHE is seeded so they can run the bare production command.
+users=${USERS:-}
 inject_mismatch=${INJECT_MISMATCH:-1}
 skip_prestage=${SKIP_PRESTAGE:-0}
 dry_run=${DRY_RUN:-0}
@@ -57,7 +66,6 @@ dry_run=${DRY_RUN:-0}
 script_dir=$(cd "$(dirname "$0")" && pwd)
 
 cache_dir="$out_root/shared/singularity_cache"
-site_config="$out_root/gadi.training.env"
 answer_key="$out_root/ANSWER_KEY.tsv"
 
 n_sets=4
@@ -335,11 +343,19 @@ if [ -d "$seed_cache" ] && [ "$seed_cache" != "$cache_dir" ]; then
     warn "Repair them with scripts/repair_singularity_cache.sh before the session."
   fi
 
-  log "Seeding from $seed_cache (skipping zero-byte stubs) ..."
+  log "Seeding from $seed_cache (hard links, skipping zero-byte stubs) ..."
   if [ "$dry_run" -ne 0 ]; then
-    printf '[dry-run] rsync -a --min-size=1 %s/ %s/\n' "$seed_cache" "$cache_dir"
+    printf '[dry-run] hard-link non-empty images from %s into %s\n' "$seed_cache" "$cache_dir"
   else
-    rsync -a --min-size=1 "$seed_cache"/ "$cache_dir"/
+    # ln rather than copy: same filesystem, so this costs no extra disk. -size +0c
+    # is what keeps a poisoned 0-byte stub from propagating. A later pull by
+    # Nextflow writes a new inode, so it cannot mutate the seed cache's images.
+    find "$seed_cache" -maxdepth 1 -type f -size +0c -exec ln -f {} "$cache_dir"/ \; 2>/dev/null \
+      || warn "hard-link seed failed; falling back to copy" \
+      && true
+    if [ -z "$(find "$cache_dir" -maxdepth 1 -type f 2>/dev/null)" ]; then
+      rsync -a --min-size=1 "$seed_cache"/ "$cache_dir"/
+    fi
     chmod -R g+rwX "$cache_dir" 2>/dev/null || true
     log "Cache now holds $(find "$cache_dir" -maxdepth 1 -type f | wc -l | tr -d ' ') file(s)"
   fi
@@ -368,31 +384,54 @@ fi
 echo
 
 # --------------------------------------------------------------------------
-# Training site config. --site-config takes any path, so this need not live
-# inside a clone. It inherits the production config and overrides only the
-# cache, which keeps it from drifting as the shared install changes.
+# Seed each user's OWN default cache path.
+#
+# The point is that users run the documented production command - three paths
+# and a batch size, no flags - so nothing may depend on passing --site-config
+# or SING_CACHE. The production site config resolves
+#   SING_CACHE=${SING_CACHE:-/scratch/$PROJECT/$USER_NAME/singularity_cache}
+# per account, so the only way to leave the command bare is for that path to
+# already be populated for each account.
+#
+# Hard links, so this costs no extra disk: /scratch/$PROJECT is one filesystem,
+# the images are shared inodes, and a later pull by one user writes a new inode
+# rather than mutating anyone else's image.
 # --------------------------------------------------------------------------
 [ -f "$prod_site_config" ] || warn "Production site config not found: $prod_site_config"
 
-if [ "$dry_run" -eq 0 ]; then
-  {
-    printf '#!/usr/bin/env bash\n'
-    printf '# Generated by setup_training_session.sh on %s\n' "$(date +%Y-%m-%dT%H:%M:%S)"
-    printf '# Training site config: production settings, one shared Singularity cache.\n\n'
-    if [ -f "$prod_site_config" ]; then
-      printf '# shellcheck source=/dev/null\n'
-      printf 'source %s\n\n' "$prod_site_config"
-    else
-      printf '# NOTE: production site config was not found at\n'
-      printf '#   %s\n' "$prod_site_config"
-      printf '# Set BACTOPIA_PIPELINE / DATASETS_CACHE / KRAKEN2_DB / NEXTFLOW_CONFIG by hand.\n\n'
+if [ -z "$users" ]; then
+  warn "USERS is unset, so no per-account caches were seeded."
+  warn "Each user's first run would then try to pull containers from a compute"
+  warn "node, which has no internet. Re-run with the NCI usernames, e.g.:"
+  warn "  USERS='abc123 def456 ghi789 jkl012' $0"
+else
+  log "Seeding per-account caches by hard link (no extra disk):"
+  for u in $users; do
+    user_cache="${scratch_root}/${project}/${u}/singularity_cache"
+
+    if [ "$dry_run" -ne 0 ]; then
+      printf '[dry-run] cp -al %s/. %s/\n' "$cache_dir" "$user_cache"
+      continue
     fi
-    printf '# The override that matters for training: one cache, not four.\n'
-    printf 'SING_CACHE=%s\n' "$cache_dir"
-  } > "$site_config"
-  chmod 0664 "$site_config" 2>/dev/null || true
+
+    if ! mkdir -p "$user_cache" 2>/dev/null; then
+      warn "  $u: cannot create $user_cache (permissions)."
+      warn "    Have $u run: mkdir -p $user_cache && cp -al $cache_dir/. $user_cache/"
+      continue
+    fi
+
+    # Group-writable + setgid so the account can add its own images later.
+    chmod 2775 "$user_cache" 2>/dev/null || true
+
+    if cp -al "$cache_dir"/. "$user_cache"/ 2>/dev/null; then
+      n=$(find "$user_cache" -maxdepth 1 -type f | wc -l | tr -d ' ')
+      printf '    %-12s %s (%s images)\n' "$u" "$user_cache" "$n"
+    else
+      warn "  $u: hard-link seed into $user_cache failed."
+      warn "    Have $u run: cp -al $cache_dir/. $user_cache/"
+    fi
+  done
 fi
-log "Training site config: $site_config"
 echo
 
 # --------------------------------------------------------------------------
@@ -443,28 +482,29 @@ while [ "$set_i" -le "$n_sets" ]; do
   cat <<EOF
 # --- user${set_i} ---
 ${training_clone}/bin/bactopia-workbench submit gadi \\
-  --site-config ${site_config} \\
   --dry-run \\
   ${out_root}/user${set_i}/fastq \\
   ${out_root}/user${set_i}/metadata \\
   ${out_root}/user${set_i}/results \\
-  4
+  50
 
 EOF
   set_i=$(( set_i + 1 ))
 done
 
 cat <<EOF
-Then drop --dry-run and add the subsampling override, the cheapest runtime
-lever available without touching the FASTQs:
+That is the documented production command shape - three paths and a batch size,
+no flags - which is the whole point of seeding each account's own cache.
+
+Drop --dry-run to submit for real. To cut assembly time, add the subsampling
+override, the cheapest runtime lever available without touching the FASTQs:
 
   EXTRA_ARGS_STRING='--coverage 40' \\
   ${training_clone}/bin/bactopia-workbench submit gadi \\
-    --site-config ${site_config} \\
     ${out_root}/user1/fastq \\
     ${out_root}/user1/metadata \\
     ${out_root}/user1/results \\
-    4
+    50
 
 Leave --additional-tools off: it pulls in ten tools whose images are not cached.
 EOF
