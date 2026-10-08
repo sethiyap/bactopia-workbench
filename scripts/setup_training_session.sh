@@ -71,6 +71,9 @@ users=${USERS:-}
 # what actually decides how long a session takes.
 samples_per_user=${SAMPLES_PER_USER:-1}
 inject_mismatch=${INJECT_MISMATCH:-1}
+# Also build a combined set of every user's samples, so the trainer can run it
+# once beforehand and know exactly what each person's output should look like.
+build_reference=${BUILD_REFERENCE:-1}
 skip_prestage=${SKIP_PRESTAGE:-0}
 dry_run=${DRY_RUN:-0}
 
@@ -169,6 +172,10 @@ Options:
       --no-mismatch          Do not deliberately mislabel any organism. Mislabelling
                              only takes effect at --samples-per-user 4 anyway, where
                              the target sample is included.
+      --no-reference         Skip the combined reference set. By default one is built
+                             holding every user's samples, with the same labels they
+                             were given, so you can run it once beforehand and know
+                             what each person's output should look like.
       --dry-run              Print what would happen; change nothing
   -h, --help                 Print this message
 
@@ -212,6 +219,8 @@ while [ $# -gt 0 ]; do
       training_clone=$2; shift 2 ;;
     --no-mismatch)
       inject_mismatch=0; shift ;;
+    --no-reference)
+      build_reference=0; shift ;;
     --dry-run)
       dry_run=1; shift ;;
     -h|--help)
@@ -394,6 +403,22 @@ if [ "$dry_run" -eq 0 ]; then
   printf 'set\tsample\tsheet_organism\ttrue_organism\tnote\n' > "$answer_key"
 fi
 
+# A combined set holding every user's samples, for the trainer to run once
+# beforehand. Worth doing as ONE submission rather than four: each submission is
+# a chain of ~10 driver jobs that queue separately, so four parallel chains
+# compete for the same queue while one chain does not. The sheet carries the same
+# organism labels the users were given - including any deliberate mislabel - so
+# each reference row is exactly what that user should see.
+if [ "$build_reference" -ne 0 ]; then
+  ref_root="$out_root/reference"
+  ref_fq="$ref_root/fastq"
+  ref_md="$ref_root/metadata"
+  ref_res="$ref_root/REF"
+  ref_sheet="$ref_md/REF_samplesheet.txt"
+  mkdirp "$ref_fq" "$ref_md" "$ref_res"
+  [ "$dry_run" -eq 0 ] && printf 'Sample name\tOrganism\n' > "$ref_sheet"
+fi
+
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   mislabel=$(mislabel_for_set "$set_i")
@@ -441,6 +466,14 @@ while [ "$set_i" -le "$n_sets" ]; do
       printf 'user%s\t%s\t%s\t%s\t%s\n' \
         "$set_i" "$s" "$sheet_org" "$true_org" "$note" >> "$answer_key"
     fi
+
+    # Same sample, same label, into the combined reference set.
+    if [ "$build_reference" -ne 0 ]; then
+      link_or_copy "$r1" "$ref_fq/$(basename "$r1")"
+      link_or_copy "$r2" "$ref_fq/$(basename "$r2")"
+      [ "$dry_run" -eq 0 ] && printf '%s\t%s\n' "$s" "$sheet_org" >> "$ref_sheet"
+    fi
+
     printf '    %-14s %-30s %s\n' "$s" "${sheet_org:-<blank>}" "$note"
   done
 
@@ -579,31 +612,74 @@ if [ "$dry_run" -eq 0 ]; then
   echo
 fi
 
+if [ "$build_reference" -ne 0 ]; then
+  cat <<EOF
+=============================================================================
+TRAINER: run this once, before the session
+=============================================================================
+
+The reference set holds every user's samples with the labels they were given,
+so its workbook tells you exactly what each person's output should look like.
+
+Run it as ONE submission. Each submission is a chain of about ten driver jobs
+that queue separately, so one chain beats four people's chains competing.
+
+  export EXTRA_ARGS_STRING='--coverage 20'
+  ${training_clone}/bin/bactopia-workbench submit gadi \\
+    ${ref_root}/fastq \\
+    ${ref_root}/metadata \\
+    ${ref_res} \\
+    50
+
+Results land in ${ref_res}, with the workbook at REF_results.xlsx.
+Check it against ANSWER_KEY.tsv: every row marked as a deliberate mismatch
+should come back with review_required set.
+
+Time it. That number is the only honest basis for deciding whether the sample
+count is right, and for telling users how long to expect to wait.
+
+EOF
+fi
+
 cat <<'NOTES'
 =============================================================================
-Two manual steps this script deliberately does not do
+If the session is too slow, in order of effect
 =============================================================================
 
-1. REHEARSE ONE SET END TO END and time it. That number decides whether four
-   samples each is right, and it is the only way to know: nothing here can
-   predict a per-batch runtime.
+The executor is pbspro, so every Nextflow task is its own PBS job and queue
+wait dominates. Compute is not usually the problem: four samples assembled in
+55 minutes while their CheckM tasks sat in the queue for 22 hours.
 
-2. OPTIONAL - SHORTEN THE WALLTIME if queue wait turns out to be the binding
-   constraint. scheduler_submit (scripts/lib_scheduler.sh) passes only
-   -o/-e/-m/-M/-N/-W/-v to qsub. There is NO hook for -q or -l walltime:
-   resources are fixed in the #PBS headers. run_bactopia_batch.pbs asks for 24h
-   and run_extra_bactopia_tools.pbs for 48h, and PBS schedules on the request
-   rather than the need, so four samples can sit behind a 24h reservation.
+1. DROP CHECKM. It is the heaviest task and the hardest to schedule, asking
+   4 CPUs, 32 GB and 24h walltime for about ten minutes of work.
 
-   That cannot be fixed without editing those headers, so do it in a copy
-   rather than in the shared install:
+     export TOOLS_STRING='abritamr amrfinderplus bracken mlst plasmidfinder'
 
-     cp -a /g/data/rg42/bactopia-workbench /g/data/rg42/bactopia-workbench-short
-     # trim walltime in the copy's scripts/run_bactopia_batch.pbs (~4h)
-     # and scripts/run_extra_bactopia_tools.pbs (~2h)
+   You lose the checkm_ completeness/contamination columns.
 
-   Then re-run this script with TRAINING_CLONE=/g/data/rg42/bactopia-workbench-short
-   so the printed commands point at the copy.
+2. SHORTEN THE TASK WALLTIMES AND USE EXPRESS. This is the root cause. Note
+   that `time` in the config is NOT what PBS sees: clusterOptions hardcodes
+   walltime=, and that is the -l PBS honours, so the string is what to edit.
+
+     cp /g/data/rg42/bactopia-workbench/scripts/nextflow.gadi.all_tools.config \
+        /scratch/rg42/training/nextflow.training.config
+     sed -i -e 's/walltime=24:00:00/walltime=02:00:00/g' \
+            -e 's/walltime=12:00:00/walltime=02:00:00/g' \
+            -e "s/queue = 'normal'/queue = 'express'/" \
+        /scratch/rg42/training/nextflow.training.config
+     export NEXTFLOW_CONFIG=/scratch/rg42/training/nextflow.training.config
+
+3. SHORTEN THE CHAIN. Each optional stage is another driver job with its own
+   queue wait. RUN_ST131_TYPER=0 and RUN_COLLECT_ASSEMBLIES=0 cost the least
+   teaching value; RUN_KLEBORATE=0 and RUN_FIMTYPER=0 cost the most.
+
+4. SUBSAMPLE THE READS. Smallest effect of the four, since compute is not the
+   bottleneck, but it does cut assembly time:
+
+     export EXTRA_ARGS_STRING='--coverage 20'
+
+These are all environment variables, so they stay in the trainer's hands and
+the command users type stays bare.
 
 =============================================================================
 What each user runs (dry run first)
@@ -628,17 +704,11 @@ done
 
 cat <<EOF
 That is the documented production command shape - three paths and a batch size,
-no flags - which is the whole point of seeding each account's own cache.
+no flags - which is the whole point of seeding each account's own cache. Drop
+--dry-run to submit for real.
 
-Drop --dry-run to submit for real. To cut assembly time, add the subsampling
-override, the cheapest runtime lever available without touching the FASTQs:
-
-  EXTRA_ARGS_STRING='--coverage 40' \\
-  ${training_clone}/bin/bactopia-workbench submit gadi \\
-    ${out_root}/user1/fastq \\
-    ${out_root}/user1/metadata \\
-    ${out_root}/user1/U1 \\
-    50
+Anything you want applied to every user's run goes in the environment before
+they submit, so their command stays bare - see the slowness notes above.
 
 Leave --additional-tools off: it pulls in ten tools whose images are not cached.
 EOF
