@@ -1,8 +1,10 @@
 # Tutorial: Your First Run On NCI Gadi
 
 A step-by-step walkthrough, from logging in to reading your results. Every
-command can be copied and pasted as written, once you set one variable in
-[Step 2](#step-2-point-the-tutorial-at-your-folder).
+command can be copied and pasted as written, once you set three paths in
+[Step 2](#step-2-set-your-three-paths).
+
+Works for a training set or for your own data — only Step 2 changes.
 
 No Gadi experience is assumed. If a command does something unexpected, skip to
 [If Something Goes Wrong](#if-something-goes-wrong).
@@ -12,14 +14,14 @@ No Gadi experience is assumed. If a command does something unexpected, skip to
 - An **NCI username** (looks like `abc123`). This is written `<your-username>`
   below — replace it with your own, including the angle brackets.
 - Membership of the **`rg42`** project.
-- The **session folder** your trainer gives you, for example
-  `/scratch/rg42/training/2026-10-07/user1`. Each person has their own.
+- Three locations, covered in Step 2: where your **reads** are, where your
+  **sample sheet** is, and where **results** should go.
 
 ## Contents
 
 1. [Log in to Gadi](#step-1-log-in-to-gadi)
-2. [Point the tutorial at your folder](#step-2-point-the-tutorial-at-your-folder)
-3. [Look at what you have been given](#step-3-look-at-what-you-have-been-given)
+2. [Set your three paths](#step-2-set-your-three-paths)
+3. [Look at your inputs](#step-3-look-at-your-inputs)
 4. [Check everything is ready](#step-4-check-everything-is-ready-dry-run)
 5. [Submit the run](#step-5-submit-the-run)
 6. [Check the status](#step-6-check-the-status)
@@ -50,46 +52,73 @@ Go to your home directory:
 cd ~
 ```
 
-## Step 2: Point The Tutorial At Your Folder
+## Step 2: Set Your Three Paths
 
-Set one variable so every later command works without editing. Replace the path
-with the session folder your trainer gave you:
+Set three variables so every later command works without editing. **This is the
+only step you change** — everything after it is copy-paste.
+
+| Variable | What it points at |
+|---|---|
+| `READS` | The folder holding your `*_R1.fastq.gz` / `*_R2.fastq.gz` files |
+| `METADATA` | The **folder** holding your `*_samplesheet.txt` — not the file itself |
+| `OUT` | Where results should be written. Name this after your dataset |
+
+### If you were given a training set
 
 ```bash
-export MYSET=/scratch/rg42/training/2026-10-07/user1
+export READS=/scratch/rg42/training/2026-10-07/user1/fastq
+export METADATA=/scratch/rg42/training/2026-10-07/user1/metadata
+export OUT=/scratch/rg42/training/2026-10-07/user1/U1
 ```
 
-Check it is right:
+Replace `user1`/`U1` with the set you were given.
+
+### If you are running your own data
 
 ```bash
-ls $MYSET
+export READS=/scratch/rg42/AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5
+export METADATA=/scratch/rg42/AGAR/metadata/2025/B07
+export OUT=/scratch/rg42/AGAR/intermediates/2025/B07
 ```
 
-Expected output — three folders:
+Any readable path works for `READS` and `METADATA`; `OUT` needs to be somewhere
+you can write, normally under `/scratch/rg42`. It is created if it does not
+exist.
 
-```text
-fastq  metadata  results
+> **`OUT`'s folder name becomes your output filenames.** The workbook is the
+> folder's name plus `_results.xlsx`, so `.../2025/B07` gives `B07_results.xlsx`.
+> Avoid naming it `results`, or you get `results_results.xlsx`.
+
+Check all three:
+
+```bash
+ls $READS | head
+ls $METADATA
+echo "results will go to: $OUT"
 ```
 
-> If you log out and back in, run the `export MYSET=...` line again. It is
+`$READS` should list FASTQ files, and `$METADATA` should contain exactly one
+`*_samplesheet.txt`.
+
+> If you log out and back in, run the three `export` lines again. They are
 > forgotten when your session ends.
 
-## Step 3: Look At What You Have Been Given
+## Step 3: Look At Your Inputs
 
 **Your sequencing reads.** Each sample has two files, `_R1` and `_R2`, which are
 the two ends of each DNA fragment:
 
 ```bash
-ls $MYSET/fastq
+ls $READS
 ```
 
-You should see 8 files — 4 samples × 2 files.
+For a training set you should see 8 files — 4 samples × 2 files.
 
 **Your sample sheet.** This lists each sample and the organism the lab recorded
 for it:
 
 ```bash
-cat $MYSET/metadata/*_samplesheet.txt
+cat $METADATA/*_samplesheet.txt
 ```
 
 ```text
@@ -117,9 +146,9 @@ queuing any work. It takes a minute or two.
 ```bash
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
   --dry-run \
-  $MYSET/fastq \
-  $MYSET/metadata \
-  $MYSET/results \
+  $READS \
+  $METADATA \
+  $OUT \
   50
 ```
 
@@ -148,9 +177,9 @@ The same command, without `--dry-run`:
 
 ```bash
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
-  $MYSET/fastq \
-  $MYSET/metadata \
-  $MYSET/results \
+  $READS \
+  $METADATA \
+  $OUT \
   50
 ```
 
@@ -214,7 +243,7 @@ Jobs appear roughly in this order. `b001` is batch 1:
 The pipeline writes a running log into your results folder:
 
 ```bash
-tail -f $MYSET/results/submit_workbench_pipeline_*.log
+tail -f $OUT/submit_workbench_pipeline_*.log
 ```
 
 Press `Ctrl-C` to stop watching (this does not stop the run).
@@ -224,13 +253,13 @@ Press `Ctrl-C` to stop watching (this does not stop the run).
 Each stage writes its own output and error files here:
 
 ```bash
-ls $MYSET/results/pipeline_logs/scheduler
+ls $OUT/pipeline_logs/scheduler
 ```
 
 To read the error from a failed stage:
 
 ```bash
-cat $MYSET/results/pipeline_logs/scheduler/b001_bactopia.e*
+cat $OUT/pipeline_logs/scheduler/b001_bactopia.e*
 ```
 
 To see why a finished job ended, using a job ID from `qstat`:
@@ -246,7 +275,7 @@ qstat -fx 141234567 | grep -E 'Exit_status|comment'
 When `qstat -u $USER` shows no jobs left:
 
 ```bash
-ls $MYSET/results
+ls $OUT
 ```
 
 ### The two files worth opening
@@ -254,16 +283,17 @@ ls $MYSET/results
 **1. The Excel workbook** — everything in one spreadsheet:
 
 ```bash
-ls $MYSET/results/*.xlsx
+ls $OUT/*.xlsx
 ```
 
-> The filename is built from your results folder's name, so it is
-> `results_results.xlsx`. That repetition is expected, not a mistake.
+> The filename is your `OUT` folder's name plus `_results.xlsx` — so `OUT`
+> ending in `U1` gives `U1_results.xlsx`, and `.../2025/B07` gives
+> `B07_results.xlsx`.
 
 **2. The results table** — the same main sheet as a text file:
 
 ```bash
-ls $MYSET/results/*_with_results*.tsv
+ls $OUT/*_with_results*.tsv
 ```
 
 Prefer `*_mlst_reviewed.tsv` if it exists; it is the version after the MLST
@@ -285,7 +315,7 @@ columns at the very end:
 ### Samples flagged for review
 
 ```bash
-cat $MYSET/results/*_review_required.tsv
+cat $OUT/*_review_required.tsv
 ```
 
 A sample is flagged when the species the sequencing data points to disagrees
@@ -296,19 +326,26 @@ does. Compare `bracken_*` (what the data says) against the `Organism` column
 
 ## Step 8: Copy Results To Your Own Computer
 
-Run this **in a terminal on your own computer**, not on Gadi:
+First, on Gadi, print the full path you need — `$OUT` does not exist on your own
+computer, so you have to paste the real path:
 
 ```bash
-scp '<your-username>@gadi.nci.org.au:/scratch/rg42/training/2026-10-07/user1/results/*.xlsx' .
+echo $OUT
 ```
 
-Adjust the path to your own set. The quotes matter — they stop your own
-computer from trying to interpret the `*`.
+Then, **in a terminal on your own computer**, not on Gadi, using that path:
+
+```bash
+scp '<your-username>@gadi.nci.org.au:<paste-the-path-here>/*.xlsx' .
+```
+
+The quotes matter — they stop your own computer from trying to interpret the
+`*` before it reaches Gadi.
 
 To copy the whole results folder:
 
 ```bash
-scp -r <your-username>@gadi.nci.org.au:/scratch/rg42/training/2026-10-07/user1/results .
+scp -r <your-username>@gadi.nci.org.au:<paste-the-path-here> .
 ```
 
 > `/scratch` on Gadi is not backed up and files there are removed after a period
@@ -317,11 +354,17 @@ scp -r <your-username>@gadi.nci.org.au:/scratch/rg42/training/2026-10-07/user1/r
 ## If Something Goes Wrong
 
 **`ls: cannot access ...: No such file or directory`**
-`MYSET` is wrong or unset. Re-run the `export MYSET=...` line from Step 2 and
-check with `echo $MYSET`.
+One of your three paths is wrong or unset. Check what they are set to:
+
+```bash
+echo "READS=$READS"; echo "METADATA=$METADATA"; echo "OUT=$OUT"
+```
+
+If any prints empty, re-run the `export` lines from Step 2.
 
 **`Permission denied`**
-Check with your trainer that the folder belongs to you.
+You can read `READS` and `METADATA` but cannot write to `OUT`. Point `OUT`
+somewhere under `/scratch/rg42` that belongs to you, or ask your trainer.
 
 **The dry run reports `DRY RUN FAIL`**
 Do not submit. Show the failing line to your trainer — it names exactly what is
@@ -331,10 +374,10 @@ missing.
 A stage failed. Check the end of the pipeline log:
 
 ```bash
-tail -30 $MYSET/results/submit_workbench_pipeline_*.log
+tail -30 $OUT/submit_workbench_pipeline_*.log
 ```
 
-then the stage error files in `$MYSET/results/pipeline_logs/scheduler`.
+then the stage error files in `$OUT/pipeline_logs/scheduler`.
 
 **Jobs sit in `Q` for a long time**
 Normal — you are sharing the machine. `qstat -u $USER` to keep checking. Check
@@ -351,23 +394,25 @@ Delete the extra jobs with `qdel <jobid>`, using the IDs from `qstat -u $USER`.
 ## Quick Reference
 
 ```bash
-# set up (once per login)
-export MYSET=/scratch/rg42/training/2026-10-07/user1
+# set up (once per login) - the only lines you edit
+export READS=/scratch/rg42/training/2026-10-07/user1/fastq
+export METADATA=/scratch/rg42/training/2026-10-07/user1/metadata
+export OUT=/scratch/rg42/training/2026-10-07/user1/U1
 
 # check, then submit
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
-  --dry-run $MYSET/fastq $MYSET/metadata $MYSET/results 50
+  --dry-run $READS $METADATA $OUT 50
 
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
-  $MYSET/fastq $MYSET/metadata $MYSET/results 50
+  $READS $METADATA $OUT 50
 
 # monitor
 qstat -u $USER
-tail -f $MYSET/results/submit_workbench_pipeline_*.log
+tail -f $OUT/submit_workbench_pipeline_*.log
 
 # results
-ls $MYSET/results/*.xlsx
-cat $MYSET/results/*_review_required.tsv
+ls $OUT/*.xlsx
+cat $OUT/*_review_required.tsv
 ```
 
 ## Where To Go Next

@@ -269,7 +269,11 @@ while [ "$set_i" -le "$n_sets" ]; do
   set_root="$out_root/user${set_i}"
   fq_dir="$set_root/fastq"
   md_dir="$set_root/metadata"
-  res_dir="$set_root/results"
+  # Named after the set, because the workbook, assemblies and ST131Typer dirs are
+  # all basename(RESULTS_ROOT) + a suffix. A dir called "results" would produce
+  # results_results.xlsx; "U1" produces U1_results.xlsx, matching the way a
+  # production run under .../intermediates/2025/B07 yields B07_results.xlsx.
+  res_dir="$set_root/U${set_i}"
   sheet="$md_dir/U${set_i}_samplesheet.txt"
 
   log "user${set_i}:"
@@ -485,7 +489,7 @@ ${training_clone}/bin/bactopia-workbench submit gadi \\
   --dry-run \\
   ${out_root}/user${set_i}/fastq \\
   ${out_root}/user${set_i}/metadata \\
-  ${out_root}/user${set_i}/results \\
+  ${out_root}/user${set_i}/U${set_i} \\
   50
 
 EOF
@@ -503,7 +507,7 @@ override, the cheapest runtime lever available without touching the FASTQs:
   ${training_clone}/bin/bactopia-workbench submit gadi \\
     ${out_root}/user1/fastq \\
     ${out_root}/user1/metadata \\
-    ${out_root}/user1/results \\
+    ${out_root}/user1/U1 \\
     50
 
 Leave --additional-tools off: it pulls in ten tools whose images are not cached.
