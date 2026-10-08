@@ -112,7 +112,8 @@ the two ends of each DNA fragment:
 ls $READS
 ```
 
-For a training set you should see 8 files — 4 samples × 2 files.
+There are two files for every sample, so a one-sample training set shows two
+files and a four-sample set shows eight.
 
 **Your sample sheet.** This lists each sample and the organism the lab recorded
 for it:
@@ -124,9 +125,6 @@ cat $METADATA/*_samplesheet.txt
 ```text
 Sample name	Organism
 24GNB-1752	Escherichia coli
-24GNB-1753	Escherichia coli
-24GNB-1744	Klebsiella pneumoniae
-24GNB-1760	Escherichia coli
 ```
 
 The **sample name** is the part of the FASTQ filename before the first
@@ -154,7 +152,8 @@ queuing any work. It takes a minute or two.
 
 Reading the three paths: **where the reads are**, **where the sample sheet is**,
 **where results should go**. The `50` is the batch size — how many samples go
-into one job. You have 4, so they all go into a single batch.
+into one job. A training set is well under that, so everything goes into a
+single batch.
 
 You will see many lines like:
 
@@ -319,10 +318,13 @@ cat $OUT/*_review_required.tsv
 ```
 
 A sample is flagged when the species the sequencing data points to disagrees
-with the organism recorded in your sample sheet. **At least one of your samples
-is expected to be flagged** — that is deliberate, so you see what the check
-does. Compare `bracken_*` (what the data says) against the `Organism` column
-(what the lab recorded) and decide which you trust.
+with the organism recorded in your sample sheet. For a flagged sample, compare
+`bracken_*` (what the data says) against the `Organism` column (what the lab
+recorded) and decide which you trust.
+
+An empty file, or no file at all, means nothing was flagged — which is the
+normal, good outcome. Your trainer may have deliberately mislabelled one sample
+so you can see this check fire.
 
 ## Step 8: Copy Results To Your Own Computer
 

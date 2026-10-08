@@ -13,10 +13,12 @@
 # RUN THIS FROM A GADI LOGIN NODE. Compute nodes have no outbound internet, so
 # the container staging step cannot work anywhere else.
 #
-#   USERS='abc123 def456 ghi789 jkl012' ./scripts/setup_training_session.sh
-#   DRY_RUN=1 USERS='...' ./scripts/setup_training_session.sh   # change nothing
+#   ./scripts/setup_training_session.sh -n 1 -u 'abc123 def456 ghi789 jkl012'
+#   ./scripts/setup_training_session.sh --dry-run -u 'abc123'   # change nothing
+#   ./scripts/setup_training_session.sh --help
 #
-# Defaults point at the 2024 B07 delivery. Override with env vars:
+# Defaults point at the 2024 B07 delivery. Every option below is also an
+# environment variable; a command-line option wins over the environment:
 #
 #   USERS              (none)  NCI usernames, space separated. Each one's own
 #                              default SING_CACHE is seeded by hard link, which
@@ -28,7 +30,12 @@
 #   SEED_CACHE         /scratch/rg42/$USER/singularity_cache
 #   PROD_SITE_CONFIG   /g/data/rg42/bactopia-workbench/config/sites/gadi.local.env
 #   TRAINING_CLONE     /g/data/rg42/bactopia-workbench
-#   INJECT_MISMATCH    1   deliberately mislabel one organism per set
+#   SAMPLES_PER_USER   1   samples each person gets, 1-4. One keeps the session
+#                          short: every Nextflow task is its own PBS job, so this
+#                          is the main thing deciding how long people wait.
+#   INJECT_MISMATCH    1   deliberately mislabel one organism per set. Only takes
+#                          effect at SAMPLES_PER_USER=4, where the target sample
+#                          is included
 #   SKIP_PRESTAGE      0   set to 1 to skip the container download step
 #   DRY_RUN            0   set to 1 to change nothing
 #
@@ -59,6 +66,10 @@ training_clone=${TRAINING_CLONE:-/g/data/${project}/bactopia-workbench}
 # NCI usernames of the people running the session, space separated. Each one's
 # own default SING_CACHE is seeded so they can run the bare production command.
 users=${USERS:-}
+# Samples per person, 1 to 4. One is the default: every Nextflow task becomes its
+# own PBS job, so a smaller set means fewer jobs waiting in the queue, which is
+# what actually decides how long a session takes.
+samples_per_user=${SAMPLES_PER_USER:-1}
 inject_mismatch=${INJECT_MISMATCH:-1}
 skip_prestage=${SKIP_PRESTAGE:-0}
 dry_run=${DRY_RUN:-0}
@@ -70,20 +81,40 @@ answer_key="$out_root/ANSWER_KEY.tsv"
 
 n_sets=4
 
-# Four sets of four. Each set: 2x E. coli (MLST + FimTyper + ST131Typer),
-# 1x K. pneumoniae (Kleborate), 1x other genus (exercises the MLST review and
-# canonical-genus logic). The 4th sample of each set is the one deliberately
-# mislabelled when INJECT_MISMATCH=1.
+# Each set lists up to four samples; SAMPLES_PER_USER decides how many are taken,
+# from the front. Position 1 is a DIFFERENT organism in every set, so a one-sample
+# session still gives the four people four different results to compare:
+#
+#   user1  E. coli           user3  K. oxytoca
+#   user2  K. pneumoniae     user4  S. marcescens
+#
+# Positions 2-4 fill out a realistic mix when SAMPLES_PER_USER is larger: more
+# E. coli (MLST + FimTyper + ST131Typer), a K. pneumoniae (Kleborate), and one
+# other genus.
 samples_for_set() {
   case $1 in
     1) printf '%s\n' '24GNB-1752 24GNB-1753 24GNB-1744 24GNB-1760' ;;
-    2) printf '%s\n' '24GNB-1754 24GNB-1756 24GNB-1745 24GNB-1478' ;;
-    3) printf '%s\n' '24GNB-1757 24GNB-1758 24GNB-1633 24GNB-1775' ;;
-    4) printf '%s\n' '24GNB-1763 24GNB-1765 24GNB-1634 24GNB-1764' ;;
+    2) printf '%s\n' '24GNB-1745 24GNB-1754 24GNB-1756 24GNB-1478' ;;
+    3) printf '%s\n' '24GNB-1775 24GNB-1757 24GNB-1758 24GNB-1633' ;;
+    4) printf '%s\n' '24GNB-1764 24GNB-1763 24GNB-1765 24GNB-1634' ;;
   esac
 }
 
-# Wrong-genus label applied to the 4th sample of each set.
+# The sample deliberately mislabelled when INJECT_MISMATCH=1, named explicitly
+# rather than by position: if SAMPLES_PER_USER does not reach it, that set simply
+# gets no mismatch. All four targets sit at position 4, so a one-sample session
+# gives everyone a clean, correctly labelled result, and the review logic only
+# appears once SAMPLES_PER_USER is 4.
+mislabel_target_for_set() {
+  case $1 in
+    1) printf '%s\n' '24GNB-1760' ;;
+    2) printf '%s\n' '24GNB-1478' ;;
+    3) printf '%s\n' '24GNB-1633' ;;
+    4) printf '%s\n' '24GNB-1634' ;;
+  esac
+}
+
+# The wrong genus written into the sheet for that sample.
 mislabel_for_set() {
   case $1 in
     1) printf '%s\n' 'Escherichia coli' ;;
@@ -93,9 +124,104 @@ mislabel_for_set() {
   esac
 }
 
+# The first N samples of a set.
+included_samples_for_set() {
+  set -- $(samples_for_set "$1")
+  i=0
+  for s in "$@"; do
+    i=$(( i + 1 ))
+    [ "$i" -gt "$samples_per_user" ] && break
+    printf '%s\n' "$s"
+  done
+}
+
 log()  { printf '[training-setup] %s\n' "$*"; }
 warn() { printf '[training-setup] WARNING: %s\n' "$*" >&2; }
 fail() { printf '[training-setup] ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+Usage:
+  ./scripts/setup_training_session.sh [OPTIONS]
+
+Carve an existing AGAR delivery into one input set per user, and pre-populate
+each user's own Singularity cache so they can run the bare production command.
+
+Run it from a GADI LOGIN NODE: compute nodes have no outbound internet, so the
+container staging step cannot work anywhere else.
+
+Options:
+  -n, --samples-per-user N   Samples each person gets, 1-4 (default: ${samples_per_user}).
+                             One keeps the session short - every Nextflow task
+                             becomes its own PBS job, so this is the main thing
+                             deciding how long people wait.
+  -u, --users "A B C D"      NCI usernames, space separated. Each one's own default
+                             SING_CACHE is seeded, which is what lets their submit
+                             command stay bare. Without this, no caches are seeded.
+      --reads DIR            Source FASTQ delivery
+                             (default: ${src_fastq_dir})
+      --sheet FILE           Source metadata samplesheet
+                             (default: ${src_sheet})
+      --out-root DIR         Where to build the sets
+                             (default: ${out_root})
+      --install DIR          Install the printed submit commands should use
+                             (default: ${training_clone})
+      --no-mismatch          Do not deliberately mislabel any organism. Mislabelling
+                             only takes effect at --samples-per-user 4 anyway, where
+                             the target sample is included.
+      --dry-run              Print what would happen; change nothing
+  -h, --help                 Print this message
+
+Every option also has an environment variable - see the comments at the top of
+this script. A command-line option wins over the environment.
+
+Examples:
+  # one sample each for four people
+  ./scripts/setup_training_session.sh -n 1 -u "abc123 def456 ghi789 jkl012"
+
+  # look first, change nothing
+  ./scripts/setup_training_session.sh --dry-run -u "abc123"
+
+  # four samples each, from a different delivery
+  ./scripts/setup_training_session.sh -n 4 -u "abc123 def456" \\
+    --reads /scratch/rg42/AGAR/raw_data/2025/B08/B08 \\
+    --sheet /scratch/rg42/AGAR/metadata/2025/B08/B08_samplesheet.txt
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n|--samples-per-user)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      samples_per_user=$2; shift 2 ;;
+    -u|--users)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      users=$2; shift 2 ;;
+    --reads)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      src_fastq_dir=$2; shift 2 ;;
+    --sheet)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      src_sheet=$2; shift 2 ;;
+    --out-root)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      out_root=$2; cache_dir="$out_root/shared/singularity_cache"
+      answer_key="$out_root/ANSWER_KEY.tsv"; shift 2 ;;
+    --install)
+      [ $# -ge 2 ] || fail "$1 needs a value"
+      training_clone=$2; shift 2 ;;
+    --no-mismatch)
+      inject_mismatch=0; shift ;;
+    --dry-run)
+      dry_run=1; shift ;;
+    -h|--help)
+      usage; exit 0 ;;
+    -*)
+      usage >&2; echo >&2; fail "Unknown option: $1" ;;
+    *)
+      usage >&2; echo >&2; fail "Unexpected argument: $1 (this script takes options, not positional arguments)" ;;
+  esac
+done
 
 # --------------------------------------------------------------------------
 # Helpers
@@ -196,12 +322,17 @@ fi
 # underscore, so the original filenames already yield the right sample ids and
 # are copied through unchanged - no renaming needed.
 # --------------------------------------------------------------------------
-log "Resolving samples in $src_fastq_dir ..."
+case "$samples_per_user" in
+  1|2|3|4) : ;;
+  *) fail "SAMPLES_PER_USER must be 1, 2, 3 or 4 (got: $samples_per_user)" ;;
+esac
+
+log "Resolving samples in $src_fastq_dir ($samples_per_user per user) ..."
 problems=""
 total=0
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
-  for s in $(samples_for_set "$set_i"); do
+  for s in $(included_samples_for_set "$set_i"); do
     total=$(( total + 1 ))
     rc=0
     r1=$(resolve_r1 "$s") || rc=$?
@@ -266,6 +397,7 @@ fi
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   mislabel=$(mislabel_for_set "$set_i")
+  mislabel_target=$(mislabel_target_for_set "$set_i")
   set_root="$out_root/user${set_i}"
   fq_dir="$set_root/fastq"
   md_dir="$set_root/metadata"
@@ -285,9 +417,7 @@ while [ "$set_i" -le "$n_sets" ]; do
     printf 'Sample name\tOrganism\n' > "$sheet"
   fi
 
-  n=0
-  for s in $(samples_for_set "$set_i"); do
-    n=$(( n + 1 ))
+  for s in $(included_samples_for_set "$set_i"); do
     r1=$(resolve_r1 "$s")
     r2=$(mate_of "$r1")
 
@@ -299,9 +429,9 @@ while [ "$set_i" -le "$n_sets" ]; do
     sheet_org=$true_org
     note='-'
 
-    # Mislabel the 4th sample of each set so review_required and
-    # mlst_review_note actually fire during the session.
-    if [ "$inject_mismatch" -ne 0 ] && [ "$n" -eq 4 ]; then
+    # Mislabel this set's designated sample, if SAMPLES_PER_USER reached it, so
+    # review_required and mlst_review_note actually fire during the session.
+    if [ "$inject_mismatch" -ne 0 ] && [ "$s" = "$mislabel_target" ]; then
       sheet_org=$mislabel
       note='deliberate genus mismatch - expect review_required'
     fi
