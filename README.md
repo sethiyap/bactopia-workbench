@@ -1316,6 +1316,11 @@ first. See [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md#inode-warnings-on-g
 
 ## Documentation
 
+New to Gadi, or running this for the first time?
+[docs/tutorial-first-run-gadi.md](docs/tutorial-first-run-gadi.md) walks through
+one run end to end — logging in, submitting, checking job status, and reading the
+results — with copy-paste commands and no assumed HPC experience.
+
 Setup guides by submission mode (see [Submission Modes](#submission-modes)):
 
 - PBS (`submit gadi`): [docs/setup-gadi-rg42.md](docs/setup-gadi-rg42.md) (shared rg42) and [docs/setup-gadi-other.md](docs/setup-gadi-other.md) (other Gadi project)
