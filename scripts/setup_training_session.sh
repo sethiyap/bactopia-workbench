@@ -13,7 +13,7 @@
 # RUN THIS FROM A GADI LOGIN NODE. Compute nodes have no outbound internet, so
 # the container staging step cannot work anywhere else.
 #
-#   ./scripts/setup_training_session.sh -n 1 -u 'abc123 def456 ghi789 jkl012'
+#   ./scripts/setup_training_session.sh -n 1 -u 'abc123 def456 ghi789 jkl012 mno345'
 #   ./scripts/setup_training_session.sh --dry-run -u 'abc123'   # change nothing
 #   ./scripts/setup_training_session.sh --help
 #
@@ -82,24 +82,28 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 cache_dir="$out_root/shared/singularity_cache"
 answer_key="$out_root/ANSWER_KEY.tsv"
 
-n_sets=4
+# One set per person. To add another, raise this and add a case to each of the
+# three functions below, taking samples the other sets do not already use.
+n_sets=5
 
 # Each set lists up to four samples; SAMPLES_PER_USER decides how many are taken,
 # from the front. Position 1 is a DIFFERENT organism in every set, so a one-sample
 # session still gives the four people four different results to compare:
 #
-#   user1  E. coli           user3  K. oxytoca
-#   user2  K. pneumoniae     user4  S. marcescens
+#   user1  E. coli           user4  S. marcescens
+#   user2  K. pneumoniae     user5  K. aerogenes
+#   user3  K. oxytoca
 #
 # Positions 2-4 fill out a realistic mix when SAMPLES_PER_USER is larger: more
 # E. coli (MLST + FimTyper + ST131Typer), a K. pneumoniae (Kleborate), and one
-# other genus.
+# other genus. No sample appears in two sets.
 samples_for_set() {
   case $1 in
     1) printf '%s\n' '24GNB-1752 24GNB-1753 24GNB-1744 24GNB-1760' ;;
     2) printf '%s\n' '24GNB-1745 24GNB-1754 24GNB-1756 24GNB-1478' ;;
     3) printf '%s\n' '24GNB-1775 24GNB-1757 24GNB-1758 24GNB-1633' ;;
     4) printf '%s\n' '24GNB-1764 24GNB-1763 24GNB-1765 24GNB-1634' ;;
+    5) printf '%s\n' '24GNB-1799 24GNB-1654 24GNB-1711 24GNB-1751' ;;
   esac
 }
 
@@ -114,6 +118,7 @@ mislabel_target_for_set() {
     2) printf '%s\n' '24GNB-1478' ;;
     3) printf '%s\n' '24GNB-1633' ;;
     4) printf '%s\n' '24GNB-1634' ;;
+    5) printf '%s\n' '24GNB-1751' ;;
   esac
 }
 
@@ -124,6 +129,7 @@ mislabel_for_set() {
     2) printf '%s\n' 'Klebsiella pneumoniae' ;;
     3) printf '%s\n' 'Escherichia coli' ;;
     4) printf '%s\n' 'Escherichia coli' ;;
+    5) printf '%s\n' 'Escherichia coli' ;;
   esac
 }
 
@@ -184,7 +190,7 @@ this script. A command-line option wins over the environment.
 
 Examples:
   # one sample each for four people
-  ./scripts/setup_training_session.sh -n 1 -u "abc123 def456 ghi789 jkl012"
+  ./scripts/setup_training_session.sh -n 1 -u "abc123 def456 ghi789 jkl012 mno345"
 
   # look first, change nothing
   ./scripts/setup_training_session.sh --dry-run -u "abc123"
@@ -631,7 +637,7 @@ if [ -z "$users" ]; then
   warn "USERS is unset, so no per-account caches were seeded."
   warn "Each user's first run would then try to pull containers from a compute"
   warn "node, which has no internet. Re-run with the NCI usernames, e.g.:"
-  warn "  USERS='abc123 def456 ghi789 jkl012' $0"
+  warn "  USERS='abc123 def456 ghi789 jkl012 mno345' $0"
 else
   log "Seeding per-account caches by hard link (no extra disk):"
   for u in $users; do
