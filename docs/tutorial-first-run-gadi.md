@@ -269,12 +269,44 @@ qstat -fx 141234567 | grep -E 'Exit_status|comment'
 
 `Exit_status = 0` means success.
 
+### Your run will probably outlast the session
+
+This is normal and is not a problem. Gadi is shared, so your jobs wait in the
+queue behind other people's, and the wait is usually far longer than the
+analysis itself. A run submitted during a training session often finishes that
+evening or the next day.
+
+So you are not expected to see your own results today. Your trainer has a
+**reference run** already completed on the same data, and that is what Step 7
+walks you through. Everything you learn there applies to your own output when
+it arrives.
+
+You can safely log out — the jobs keep running. To check back later:
+
+```bash
+ssh <your-username>@gadi.nci.org.au
+export OUT=<your results path from Step 2>
+qstat -u $USER
+ls $OUT
+```
+
+An empty `qstat` plus files in `$OUT` means it finished. An empty `qstat` with
+no results means a stage failed — see above, and tell your trainer.
+
 ## Step 7: Read Your Results
 
-When `qstat -u $USER` shows no jobs left:
+Once `qstat -u $USER` shows no jobs left, your own results are here:
 
 ```bash
 ls $OUT
+```
+
+If your run has not finished yet, follow this step on the **reference output**
+your trainer will give you instead — same data, same pipeline, already
+complete. Point `OUT` at it and every command below works unchanged:
+
+```bash
+export OUT=<reference path from your trainer>
 ```
 
 ### The two files worth opening

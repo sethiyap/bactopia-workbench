@@ -477,7 +477,68 @@ while [ "$set_i" -le "$n_sets" ]; do
     printf '    %-14s %-30s %s\n' "$s" "${sheet_org:-<blank>}" "$note"
   done
 
+  # A start card inside the user's own folder, carrying their real paths. The
+  # commands this script prints at the end go to whoever RAN it, so without this
+  # the trainer has to transcribe three paths per person by hand.
+  if [ "$dry_run" -eq 0 ]; then
+    cat > "$set_root/START_HERE.txt" <<EOF
+bactopia-workbench - your training set
+======================================
+
+Full walkthrough, including how to read the results:
+  ${training_clone}/docs/tutorial-first-run-gadi.md
+  https://github.com/sethiyap/bactopia-workbench/blob/main/docs/tutorial-first-run-gadi.md
+
+Your samples:
+$(tail -n +2 "$sheet" | sed 's/^/  /')
+
+STEP 1 - log in to Gadi, then set your three paths. These are yours; copy them
+as they are.
+
+  export READS=${fq_dir}
+  export METADATA=${md_dir}
+  export OUT=${res_dir}
+
+(Run these three lines again if you log out and back in.)
+
+STEP 2 - check everything is ready. This queues nothing.
+
+  ${training_clone}/bin/bactopia-workbench submit gadi --dry-run \\
+    \$READS \$METADATA \$OUT 50
+
+Read the end of the output. DRY RUN PASS is good, DRY RUN WARN is usually fine,
+DRY RUN FAIL must be fixed before you go on - show it to your trainer.
+
+STEP 3 - submit for real.
+
+  ${training_clone}/bin/bactopia-workbench submit gadi \\
+    \$READS \$METADATA \$OUT 50
+
+This returns straight away. That does NOT mean it has finished - it has handed
+your work to the scheduler and printed the job IDs.
+
+STEP 4 - check on it.
+
+  qstat -u \$USER
+  tail -f \$OUT/submit_workbench_pipeline_*.log     (Ctrl-C to stop watching)
+
+In the S column: Q = queued, R = running, H = waiting for an earlier stage.
+H and Q are both normal. An empty list means nothing is left to run.
+
+HOW LONG? Gadi is shared, so your jobs queue behind other people's and the wait
+is usually much longer than the analysis. Your run will probably finish this
+evening or tomorrow, not during the session - that is normal, not a failure.
+You can log out; the jobs keep going.
+
+Your trainer has a finished reference run on the same data, and that is what
+you will look at today. Everything you learn from it applies to your own
+results when they arrive.
+EOF
+    chmod 0644 "$set_root/START_HERE.txt" 2>/dev/null || true
+  fi
+
   log "  sheet: $sheet"
+  log "  start card: $set_root/START_HERE.txt"
   echo
   set_i=$(( set_i + 1 ))
 done
@@ -684,6 +745,11 @@ the command users type stays bare.
 =============================================================================
 What each user runs (dry run first)
 =============================================================================
+
+Each user also has these same commands, with their own paths already filled in,
+at <their set>/START_HERE.txt - so you can point them at that file rather than
+reading three paths out to each person. It also links the full tutorial, at
+docs/tutorial-first-run-gadi.md.
 NOTES
 
 echo
