@@ -26,7 +26,7 @@ No Gadi experience is assumed. If a command does something unexpected, skip to
 5. [Submit the run](#step-5-submit-the-run)
 6. [Check the status](#step-6-check-the-status)
 7. [Read your results](#step-7-read-your-results)
-8. [Copy results to your own computer](#step-8-copy-results-to-your-own-computer)
+8. [Copy results off Gadi](#step-8-copy-results-off-gadi)
 9. [If something goes wrong](#if-something-goes-wrong)
 
 ---
@@ -360,32 +360,91 @@ An empty file, or no file at all, means nothing was flagged — which is the
 normal, good outcome. Your trainer may have deliberately mislabelled one sample
 so you can see this check fire.
 
-## Step 8: Copy Results To Your Own Computer
+## Step 8: Copy Results Off Gadi
 
-First, on Gadi, print the full path you need — `$OUT` does not exist on your own
-computer, so you have to paste the real path:
+> `/scratch` on Gadi is not backed up, and files there are deleted after a
+> period of inactivity. Copy anything you want to keep.
+
+First, on Gadi, print the full path — `$OUT` does not exist on your own
+computer, so you need the real text:
 
 ```bash
 echo $OUT
 ```
 
-Then, **in a terminal on your own computer**, not on Gadi, using that path:
+### To your own computer
+
+Run this **on your own computer**, not on Gadi. A worked example for a user
+`jc9911` whose `echo $OUT` printed
+`/scratch/rg42/training/2026-10-12/jc9911`:
 
 ```bash
-scp '<your-username>@gadi.nci.org.au:<paste-the-path-here>/*.xlsx' .
+scp 'jc9911@gadi.nci.org.au:/scratch/rg42/training/2026-10-12/jc9911/*.xlsx' .
 ```
 
-The quotes matter — they stop your own computer from trying to interpret the
-`*` before it reaches Gadi.
+Substitute your own login and your own path. The single quotes matter — without
+them your computer tries to expand the `*` locally, where it means nothing,
+instead of letting Gadi expand it.
 
-To copy the whole results folder:
+The results table too:
 
 ```bash
-scp -r <your-username>@gadi.nci.org.au:<paste-the-path-here> .
+scp 'jc9911@gadi.nci.org.au:/scratch/rg42/training/2026-10-12/jc9911/*.tsv' .
 ```
 
-> `/scratch` on Gadi is not backed up and files there are removed after a period
-> of inactivity. Copy anything you want to keep.
+> Avoid `scp -r` on the whole folder. It includes `_work`, Nextflow's scratch
+> directory, which holds thousands of files and can be tens of gigabytes. The
+> workbook and the TSVs are what you want.
+
+### To the RDS project directory
+
+This is how results are archived for real work. It is **optional for the
+training session** — ask your trainer first, and use the destination they give
+you rather than inventing one, so training output does not land among real
+project data.
+
+You need an **RDS username**, which is separate from your NCI login.
+
+Run this on a Gadi **login node**:
+
+```bash
+export SRC_PATH=$OUT
+export RDS_DEST=<destination your trainer gives you>
+export RDS_SFTP_USER=<your RDS username>
+export TRANSFER_SCRIPT=/g/data/rg42/bactopia-workbench/scripts/transfer_gadi_to_rds.sh
+
+qsub -V /g/data/rg42/bactopia-workbench/scripts/jobsubmission_transfer_gadi_to_rds.pbs
+```
+
+This submits a job on the `copyq` queue rather than copying straight away, so
+`qstat -u $USER` shows its progress like any other stage. `_work` and the
+Nextflow logs are excluded automatically, so only real results are uploaded.
+
+If you would rather type your password than use an SSH key:
+
+```bash
+export SRC_PATH=$OUT
+export RDS_DEST=<destination your trainer gives you>
+export RDS_SFTP_USER=<your RDS username>
+export RDS_SFTP_USE_PASSWORD=1
+
+/g/data/rg42/bactopia-workbench/scripts/submit_transfer_gadi_to_rds.sh
+```
+
+That prompts once on the login node and removes the stored password when the
+job finishes.
+
+Two things that trip people up:
+
+- **`Too many authentication failures`** — the RDS server is rejecting your
+  keys before reaching the right one. Point it at one key:
+  `export RDS_SFTP_IDENTITY_FILE=$HOME/.ssh/<your_private_key>`. It must be the
+  private key itself, not `.pub`, `known_hosts` or `config`.
+- **A second upload copies nothing** — an upload manifest records what already
+  went across, so re-running skips it. `export RDS_IGNORE_MANIFEST=1` forces it.
+
+Full reference, including every variable and uploading only selected
+subdirectories: [docs/gadi-rds-transfer.md](gadi-rds-transfer.md).
 
 ## If Something Goes Wrong
 
