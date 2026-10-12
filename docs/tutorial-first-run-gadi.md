@@ -398,12 +398,21 @@ scp 'jc9911@gadi.nci.org.au:/scratch/rg42/training/2026-10-12/jc9911/*.tsv' .
 
 ### To the RDS project directory
 
-This is how results are archived for real work. It is **optional for the
-training session** — ask your trainer first, and use the destination they give
-you rather than inventing one, so training output does not land among real
-project data.
+This is how results are archived for real work, and it is **optional for the
+training session**. Read the two points below before starting — either one may
+mean you should skip this step entirely.
 
-You need an **RDS username**, which is separate from your NCI login.
+**You need an RDS account.** RDS is a separate system from NCI, with its own
+username. It is not your NCI login. **If you do not have an RDS account, this
+section does not apply to you** — skip it and use
+[your own computer](#to-your-own-computer) above instead. Check with your
+trainer if you are not sure whether you have one.
+
+**Use your own project's RDS path.** `RDS_DEST` must be a directory your own
+RDS account is allowed to write to, inside your own project. Do not upload into
+another project's directory. For a training run, do not upload into a live data
+directory either — training output mixed in with real project data is a nuisance
+to pick back out. Ask your trainer for a path to use, or skip this step.
 
 Run this on a Gadi **login node**:
 
