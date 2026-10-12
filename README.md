@@ -1029,6 +1029,12 @@ as soon as that batch's assemblies exist, and consolidation waits for it.
 
 ### Run Non-Kleborate Tools In Parallel
 
+**Use this for real, many-sample runs.** By default the tools stage is a single
+job that works through `TOOLS_STRING` one tool at a time. With a few hundred
+samples each tool is substantial, so running six of them back to back is what
+dominates the stage — fanning them out lets that work overlap and is well worth
+the extra jobs.
+
 ```bash
 RUN_TOOLS_PARALLEL=1 \
 ./bin/bactopia-workbench submit gadi \
@@ -1039,6 +1045,26 @@ RUN_TOOLS_PARALLEL=1 \
 ```
 
 If `RUN_TOOLS_PARALLEL` is unset, the default is `0`.
+
+What changes: instead of one `tools_b<batch>` job carrying every tool, you get
+one job per tool (`tb<batch>_mlst`, `tb<batch>_bracken`, …), all submitted
+behind the assembly job and all feeding the same `afterok` chain, so
+consolidation still waits for the last of them. Kleborate is deliberately
+excluded — it has its own stage, controlled by `RUN_KLEBORATE`.
+
+**Do not reach for it on a small run.** Each of those jobs inherits
+`run_extra_bactopia_tools.pbs`'s resource request — `walltime=48:00:00`,
+`ncpus=8`, `mem=32GB`, `jobfs=100GB` — so six tools means six simultaneous
+48-hour reservations instead of one. PBS schedules on the request, not the need.
+For a handful of samples the per-tool work is minutes and the extra queue wait
+more than cancels the gain; on a busy queue it can be markedly slower than
+leaving it off.
+
+The crossover depends on how busy the queue is on the day, so treat it as a
+judgement call rather than a threshold: many samples and a cooperative queue,
+turn it on; a small batch, or a queue that is already making you wait, leave it
+off and look at per-task walltimes and `maxForks` in
+`scripts/nextflow.*.all_tools.config` instead.
 
 ### Test A Small Subset
 

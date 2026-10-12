@@ -525,3 +525,8 @@ cat $OUT/*_review_required.tsv
 - [docs/setup-gadi-rg42.md](setup-gadi-rg42.md) — getting real data onto Gadi and
   results back to RDS
 - [docs/input-formats.md](input-formats.md) — sample sheet and manifest rules in full
+
+One thing worth knowing once you move from a handful of samples to a real batch:
+add `RUN_TOOLS_PARALLEL=1`, which runs each typing tool as its own job instead
+of one after another. It is a clear win on large runs and a loss on small ones —
+see [Run Non-Kleborate Tools In Parallel](../README.md#run-non-kleborate-tools-in-parallel).
