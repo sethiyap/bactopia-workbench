@@ -519,14 +519,40 @@ ls $OUT/*.xlsx
 cat $OUT/*_review_required.tsv
 ```
 
+## When You Run A Real Batch
+
+This tutorial uses a handful of samples. When you come to run a real delivery —
+tens or hundreds of samples — add **one** setting:
+
+```bash
+export RUN_TOOLS_PARALLEL=1
+
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
+  $READS $METADATA $OUT 50
+```
+
+**What it does.** By default the typing tools (MLST, AMR genes, plasmids,
+species ID, and so on) run one after another inside a single job. With
+`RUN_TOOLS_PARALLEL=1` each tool becomes its own job and they all run at the
+same time.
+
+**Why it matters on a big batch.** With hundreds of samples each tool takes a
+long time on its own, so running six of them back to back is what makes that
+stage slow. Letting them overlap can save hours.
+
+**Why this tutorial leaves it off.** Each of those jobs asks the scheduler for
+48 hours, 8 CPUs and 32 GB. For five samples the tools finish in minutes, so
+six such requests just means six longer waits in the queue instead of one — it
+is slower, not faster. Small runs: leave it off. Real batches: turn it on.
+
+If a real batch is still slow with it on, the queue rather than the computing is
+usually the limit — see
+[Run Non-Kleborate Tools In Parallel](../README.md#run-non-kleborate-tools-in-parallel)
+for the other knobs.
+
 ## Where To Go Next
 
 - [README](../README.md) — all options, input types, and the full command reference
 - [docs/setup-gadi-rg42.md](setup-gadi-rg42.md) — getting real data onto Gadi and
   results back to RDS
 - [docs/input-formats.md](input-formats.md) — sample sheet and manifest rules in full
-
-One thing worth knowing once you move from a handful of samples to a real batch:
-add `RUN_TOOLS_PARALLEL=1`, which runs each typing tool as its own job instead
-of one after another. It is a clear win on large runs and a loss on small ones —
-see [Run Non-Kleborate Tools In Parallel](../README.md#run-non-kleborate-tools-in-parallel).
