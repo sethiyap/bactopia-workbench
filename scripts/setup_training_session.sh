@@ -133,6 +133,18 @@ mislabel_for_set() {
   esac
 }
 
+# What to call set N's folder: the Nth name from --users, so each person's folder
+# is named after their own login and there is no mapping to hand out. Falls back
+# to userN when --users was not given, or gave fewer names than there are sets.
+label_for_set() {
+  i=0
+  for u in $users; do
+    i=$(( i + 1 ))
+    if [ "$i" -eq "$1" ]; then printf '%s\n' "$u"; return 0; fi
+  done
+  printf 'user%s\n' "$1"
+}
+
 # The first N samples of a set.
 included_samples_for_set() {
   set -- $(samples_for_set "$1")
@@ -419,8 +431,8 @@ if [ "$build_reference" -ne 0 ]; then
   ref_root="$out_root/reference"
   ref_fq="$ref_root/fastq"
   ref_md="$ref_root/metadata"
-  ref_res="$ref_root/REF"
-  ref_sheet="$ref_md/REF_samplesheet.txt"
+  ref_res="$ref_root"
+  ref_sheet="$ref_md/reference_samplesheet.txt"
   mkdirp "$ref_fq" "$ref_md" "$ref_res"
   [ "$dry_run" -eq 0 ] && printf 'Sample name\tOrganism\n' > "$ref_sheet"
 fi
@@ -429,17 +441,19 @@ set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   mislabel=$(mislabel_for_set "$set_i")
   mislabel_target=$(mislabel_target_for_set "$set_i")
-  set_root="$out_root/user${set_i}"
+  label=$(label_for_set "$set_i")
+  set_root="$out_root/${label}"
   fq_dir="$set_root/fastq"
   md_dir="$set_root/metadata"
-  # Named after the set, because the workbook, assemblies and ST131Typer dirs are
-  # all basename(RESULTS_ROOT) + a suffix. A dir called "results" would produce
-  # results_results.xlsx; "U1" produces U1_results.xlsx, matching the way a
-  # production run under .../intermediates/2025/B07 yields B07_results.xlsx.
-  res_dir="$set_root/U${set_i}"
-  sheet="$md_dir/U${set_i}_samplesheet.txt"
+  # RESULTS_ROOT is the person's folder itself, not a subdirectory of it. The
+  # workbook, assemblies and ST131Typer dirs are all basename(RESULTS_ROOT) plus
+  # a suffix, so this is what makes the output jc9911_results.xlsx. A subdirectory
+  # would have to repeat the name (jc9911/jc9911) to read the same way, and
+  # calling it "results" would give results_results.xlsx.
+  res_dir="$set_root"
+  sheet="$md_dir/${label}_samplesheet.txt"
 
-  log "user${set_i}:"
+  log "${label}:"
   mkdirp "$fq_dir" "$md_dir" "$res_dir"
 
   # The header is mandatory, not cosmetic: row 1 is always skipped when the
@@ -469,8 +483,8 @@ while [ "$set_i" -le "$n_sets" ]; do
 
     if [ "$dry_run" -eq 0 ]; then
       printf '%s\t%s\n' "$s" "$sheet_org" >> "$sheet"
-      printf 'user%s\t%s\t%s\t%s\t%s\n' \
-        "$set_i" "$s" "$sheet_org" "$true_org" "$note" >> "$answer_key"
+      printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$label" "$s" "$sheet_org" "$true_org" "$note" >> "$answer_key"
     fi
 
     # Same sample, same label, into the combined reference set.
@@ -698,7 +712,7 @@ that queue separately, so one chain beats four people's chains competing.
     ${ref_res} \\
     50
 
-Results land in ${ref_res}, with the workbook at REF_results.xlsx.
+Results land in ${ref_res}, with the workbook at reference_results.xlsx.
 Check it against ANSWER_KEY.tsv: every row marked as a deliberate mismatch
 should come back with review_required set.
 
@@ -762,12 +776,12 @@ echo
 set_i=1
 while [ "$set_i" -le "$n_sets" ]; do
   cat <<EOF
-# --- user${set_i} ---
+# --- $(label_for_set "$set_i") ---
 ${training_clone}/bin/bactopia-workbench submit gadi \\
   --dry-run \\
-  ${out_root}/user${set_i}/fastq \\
-  ${out_root}/user${set_i}/metadata \\
-  ${out_root}/user${set_i}/U${set_i} \\
+  ${out_root}/$(label_for_set "$set_i")/fastq \\
+  ${out_root}/$(label_for_set "$set_i")/metadata \\
+  ${out_root}/$(label_for_set "$set_i") \\
   50
 
 EOF

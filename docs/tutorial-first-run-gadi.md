@@ -61,17 +61,19 @@ only step you change** — everything after it is copy-paste.
 |---|---|
 | `READS` | The folder holding your `*_R1.fastq.gz` / `*_R2.fastq.gz` files |
 | `METADATA` | The **folder** holding your `*_samplesheet.txt` — not the file itself |
-| `OUT` | Where results should be written. Name this after your dataset |
+| `OUT` | Where results should be written. For a training set this is your own folder; for your own data, name it after the dataset |
 
 ### If you were given a training set
 
 ```bash
-export READS=/scratch/rg42/training/2026-10-07/user1/fastq
-export METADATA=/scratch/rg42/training/2026-10-07/user1/metadata
-export OUT=/scratch/rg42/training/2026-10-07/user1/U1
+export READS=/scratch/rg42/training/2026-10-12/jc9911/fastq
+export METADATA=/scratch/rg42/training/2026-10-12/jc9911/metadata
+export OUT=/scratch/rg42/training/2026-10-12/jc9911
 ```
 
-Replace `user1`/`U1` with the set you were given.
+Your folder is named after your NCI login, so replace `jc9911` with your own
+username and the date with the one your trainer gives you. Your set's
+`START_HERE.txt` has these three lines already filled in.
 
 ### If you are running your own data
 
@@ -318,7 +320,7 @@ ls $OUT/*.xlsx
 ```
 
 > The filename is your `OUT` folder's name plus `_results.xlsx` — so `OUT`
-> ending in `U1` gives `U1_results.xlsx`, and `.../2025/B07` gives
+> ending in `jc9911` gives `jc9911_results.xlsx`, and `.../2025/B07` gives
 > `B07_results.xlsx`.
 
 **2. The results table** — the same main sheet as a text file:
@@ -429,9 +431,9 @@ Delete the extra jobs with `qdel <jobid>`, using the IDs from `qstat -u $USER`.
 
 ```bash
 # set up (once per login) - the only lines you edit
-export READS=/scratch/rg42/training/2026-10-07/user1/fastq
-export METADATA=/scratch/rg42/training/2026-10-07/user1/metadata
-export OUT=/scratch/rg42/training/2026-10-07/user1/U1
+export READS=/scratch/rg42/training/2026-10-12/jc9911/fastq
+export METADATA=/scratch/rg42/training/2026-10-12/jc9911/metadata
+export OUT=/scratch/rg42/training/2026-10-12/jc9911
 
 # check, then submit
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
