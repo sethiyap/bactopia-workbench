@@ -47,12 +47,64 @@ This creates:
 /scratch/rg42/AGAR/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5
 ```
 
+#### Where it writes, and how to change it
+
+The destination is assembled from four parts, every one of which you control:
+
+```text
+$DEST_ROOT                        /  $YEAR  /  $BATCH  /  $DEST_NAME
+/scratch/rg42/AGAR/raw_data       /  2025   /  B07     /  AGRF_CAGRF26050180_AAHJ2FTM5
+└─ DEST_ROOT, env var                └─ arg 2  └─ arg 3   └─ arg 4, optional
+   default /scratch/$PROJECT/AGAR/raw_data                   default: basename of the source
+```
+
+So to write somewhere else entirely, set `DEST_ROOT`:
+
+```bash
+DEST_ROOT=/scratch/rg42/myproject/raw_data \
+/g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
+  user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5 \
+  2025 \
+  B07
+```
+
+which writes to
+`/scratch/rg42/myproject/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5`.
+
+`DEST_ROOT` must be an absolute path, and you need write access to it. The
+`<YEAR>/<BATCH>/` levels are always added beneath it — if you do not want a
+year or batch level, pass whatever you do want as those two arguments, since
+they are just directory names.
+
+To control the last level too, pass a fourth argument:
+
+```bash
+DEST_ROOT=/scratch/rg42/myproject/raw_data \
+/g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
+  user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5 \
+  2025 \
+  B07 \
+  run1
+```
+
+Preview any of these before copying anything:
+
+```bash
+DRY_RUN=1 DEST_ROOT=/scratch/rg42/myproject/raw_data \
+/g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
+  user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5 2025 B07
+```
+
 Useful notes:
 
 - `REMOTE_SPEC` must be an rsync-compatible source such as `user@host:/path/to/delivery`
-- the default destination root is `/scratch/rg42/AGAR/raw_data`
-- use `DEST_ROOT=/absolute/path` if you need a different raw-data root
-- use `DRY_RUN=1` first if you want to preview the transfer
+- `PROJECT` (default `rg42`) changes the default `DEST_ROOT` without replacing it
+- `RSYNC_RSH` sets a custom remote shell, for example `"ssh -p 2222"`
+- `RSYNC_ARGS` appends extra rsync arguments
+- `./scripts/download_agrf_to_gadi.sh` with no arguments prints the full usage
+
+Wherever you put it, that directory is what you pass as the first path to
+`submit gadi` — nothing downstream assumes the AGAR tree.
 
 ### Option B: Restore Existing Data From RDS
 
