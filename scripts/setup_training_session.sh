@@ -512,6 +512,28 @@ Full walkthrough, including how to read the results:
 Your samples:
 $(tail -n +2 "$sheet" | sed 's/^/  /')
 
+STEP 0 - one-time check: do you have the software containers?
+
+Your trainer may already have done this for you. Check first:
+
+  ls ${scratch_root}/${project}/\$USER/singularity_cache | wc -l
+
+If that prints a number around 30, you are ready - skip to STEP 1.
+
+If it prints 0, or says "No such file or directory", run these four lines:
+
+  SHARED=${cache_dir}
+  MINE=${scratch_root}/${project}/\$USER/singularity_cache
+  mkdir -p \$MINE
+  rsync -a --link-dest=\$SHARED \$SHARED/ \$MINE/
+
+That takes a second and uses no extra disk - it points at images that already
+exist rather than copying them. It is safe to run twice.
+
+Why it matters: Gadi's compute nodes have no internet, so they cannot download
+the software containers themselves. Without this your run starts, then fails
+partway through with a container error.
+
 STEP 1 - log in to Gadi, then set your three paths. These are yours; copy them
 as they are.
 
@@ -658,25 +680,28 @@ else
     user_cache="${scratch_root}/${project}/${u}/singularity_cache"
 
     if [ "$dry_run" -ne 0 ]; then
-      printf '[dry-run] cp -al %s/. %s/\n' "$cache_dir" "$user_cache"
+      printf '[dry-run] rsync -a --link-dest=%s %s/ %s/\n' "$cache_dir" "$cache_dir" "$user_cache"
       continue
     fi
 
     if ! mkdir -p "$user_cache" 2>/dev/null; then
       warn "  $u: cannot create $user_cache (permissions)."
-      warn "    Have $u run: mkdir -p $user_cache && cp -al $cache_dir/. $user_cache/"
+      warn "    Have $u run: mkdir -p $user_cache && rsync -a --link-dest=$cache_dir $cache_dir/ $user_cache/"
       continue
     fi
 
     # Group-writable + setgid so the account can add its own images later.
     chmod 2775 "$user_cache" 2>/dev/null || true
 
-    if cp -al "$cache_dir"/. "$user_cache"/ 2>/dev/null; then
+    # rsync --link-dest rather than cp -l: it hard-links just the same, but is a
+    # clean no-op when the cache is already seeded, where cp reports every image
+    # as "identical (not copied)" and makes a re-run look like a failure.
+    if rsync -a --link-dest="$cache_dir" "$cache_dir"/ "$user_cache"/ 2>/dev/null; then
       n=$(find "$user_cache" -maxdepth 1 -type f | wc -l | tr -d ' ')
       printf '    %-12s %s (%s images)\n' "$u" "$user_cache" "$n"
     else
       warn "  $u: hard-link seed into $user_cache failed."
-      warn "    Have $u run: cp -al $cache_dir/. $user_cache/"
+      warn "    Have $u run: rsync -a --link-dest=$cache_dir $cache_dir/ $user_cache/"
     fi
   done
 fi
