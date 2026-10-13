@@ -54,6 +54,20 @@ SAMPLE_HEADERS = {
 # Tables that are one row per run rather than per sample; copied whole.
 COPY_WHOLE = {"software versions", "versions", "citations"}
 
+# Scratch and scheduler noise. Nextflow work trees in particular are enormous and
+# hold a copy of everything, which would both dwarf the real output and expose
+# every other sample in the run.
+SKIP_DIRS = {"_work", "work", "tmp", "pipeline_logs", ".nextflow", "nf-reports"}
+SKIP_SUFFIXES = {".log", ".err", ".out"}
+
+# PBS delivers job logs as <name>.o<jobid> / <name>.e<jobid>.
+def is_scheduler_log(name: str) -> bool:
+    for marker in (".o", ".e"):
+        head, _, tail = name.rpartition(marker)
+        if head and tail.isdigit():
+            return True
+    return False
+
 
 def norm(value: object) -> str:
     return " ".join(str(value if value is not None else "").split()).lower()
@@ -176,6 +190,119 @@ def subset_workbook(src: Path, dest: Path, wanted: set[str]) -> tuple[dict[str, 
     return counts, seen
 
 
+def human(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f}{unit}" if unit == "B" else f"{value:.1f}{unit}"
+        value /= 1024
+    return f"{value:.1f}GB"
+
+
+def all_samples_in(table: Path) -> set[str]:
+    """Every sample id in a mapped results table, so skips can be explained."""
+    try:
+        with table.open(newline="", encoding="utf-8-sig") as handle:
+            first = handle.readline()
+            delimiter = "\t" if "\t" in first else ","
+            handle.seek(0)
+            rows = list(csv.reader(handle, delimiter=delimiter))
+    except (OSError, UnicodeDecodeError):
+        return set()
+    if not rows:
+        return set()
+    column = find_sample_column(rows[0])
+    if column is None:
+        column = 0
+    return {
+        row[column].strip()
+        for row in rows[1:]
+        if len(row) > column and row[column].strip()
+    }
+
+
+def subset_outputs(results: Path, out: Path, wanted: set[str], others: set[str],
+                   dry_run: bool) -> tuple[int, int, list[str], dict[str, int]]:
+    """Copy the per-sample output tree for the chosen samples.
+
+    Three kinds of file, handled differently:
+      - anything whose path names one of our samples: copied (assemblies,
+        per-sample tool output, ST131Typer directories)
+      - merged tables with a sample column: filtered to our samples
+      - everything else: skipped and reported, because a merged file we cannot
+        filter would carry every other sample in the run into the training set
+    """
+    copied = 0
+    total = 0
+    skipped: list[str] = []
+    reasons: dict[str, int] = {}
+
+    def skip(rel, why: str) -> None:
+        skipped.append(f"{rel} ({why})")
+        reasons[why] = reasons.get(why, 0) + 1
+
+    top_level = sorted(
+        p for p in results.iterdir()
+        if p.is_dir() and p.name not in SKIP_DIRS and not p.name.startswith(".")
+    )
+
+    for directory in top_level:
+        for src in sorted(directory.rglob("*")):
+            if not src.is_file():
+                continue
+            rel = src.relative_to(results)
+            if any(part in SKIP_DIRS or part.startswith(".") for part in rel.parts[:-1]):
+                continue
+            if src.suffix.lower() in SKIP_SUFFIXES or is_scheduler_log(src.name):
+                continue
+
+            text = str(rel)
+            dest = out / rel
+
+            if any(sample in text for sample in wanted):
+                if not dry_run:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dest)
+                copied += 1
+                total += src.stat().st_size
+                continue
+
+            if src.suffix.lower() in {".tsv", ".csv"}:
+                try:
+                    with src.open(newline="", encoding="utf-8-sig") as handle:
+                        first = handle.readline()
+                    if not first.strip():
+                        skip(rel, "empty")
+                        continue
+                    delimiter = "\t" if "\t" in first else ","
+                    header = next(csv.reader([first], delimiter=delimiter))
+                except (OSError, UnicodeDecodeError, StopIteration):
+                    skip(rel, "unreadable")
+                    continue
+
+                if find_sample_column(header) is None:
+                    skip(rel, "merged table, no sample column")
+                    continue
+
+                if not dry_run:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    rows, _ = subset_delimited(src, dest, wanted)
+                    if rows == 0:
+                        dest.unlink(missing_ok=True)
+                        skip(rel, "no matching rows")
+                        continue
+                    total += dest.stat().st_size
+                copied += 1
+                continue
+
+            if any(other in text for other in others):
+                skip(rel, "belongs to another sample")
+            else:
+                skip(rel, "not per-sample")
+
+    return copied, total, skipped, reasons
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Subset a finished run's results to a few samples, for training.",
@@ -190,6 +317,13 @@ def main() -> int:
     group.add_argument("--samples-from", type=Path,
                        help="Directory to read *_samplesheet.txt files from, "
                             "e.g. a training tree")
+    parser.add_argument("--no-outputs", action="store_true",
+                        help="Only the workbook and mapped tables. By default the "
+                             "per-sample output tree is included too (assemblies, "
+                             "tools, Kleborate, FimTyper, ST131Typer, consolidated), "
+                             "so the result looks like a real run")
+    parser.add_argument("--list-skipped", action="store_true",
+                        help="Name every file left out of the output tree")
     parser.add_argument("--dry-run", action="store_true",
                         help="Report what would be written, change nothing")
     args = parser.parse_args()
@@ -245,6 +379,26 @@ def main() -> int:
             n, seen = subset_delimited(src, dest, wanted)
             found |= seen
             print(f"  {src.name:<52} {n:>5} rows")
+
+    if not args.no_outputs:
+        run_samples: set[str] = set()
+        for target in targets:
+            if target.suffix.lower() == ".tsv":
+                run_samples |= all_samples_in(target)
+        others = run_samples - wanted
+
+        print()
+        print("Per-sample output tree:")
+        copied, total, skipped, reasons = subset_outputs(
+            args.results, args.out, wanted, others, args.dry_run)
+        print(f"  kept {copied} file(s){'' if args.dry_run else ', ' + human(total)}")
+        for why, count in sorted(reasons.items(), key=lambda kv: -kv[1]):
+            print(f"  left out {count:>5}  {why}")
+        if skipped and args.list_skipped:
+            for entry in skipped:
+                print(f"      {entry}")
+        elif skipped:
+            print("      (--list-skipped names them)")
 
     if args.dry_run:
         print("\nDry run - nothing written.")
