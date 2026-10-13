@@ -108,8 +108,13 @@ def collect_samples_from_sheets(root: Path) -> list[str]:
     return samples
 
 
-def subset_delimited(src: Path, dest: Path, wanted: set[str]) -> tuple[int, set[str]]:
-    """Filter one TSV/CSV. Returns (rows kept, sample ids seen)."""
+def filter_delimited(src: Path, wanted: set[str]) -> tuple[str, list[list[str]], set[str]]:
+    """Read a TSV/CSV and keep the header plus rows for `wanted`.
+
+    Returns (delimiter, rows-including-header, sample ids seen). Nothing is
+    written here: the caller decides, so that a table with no matching rows does
+    not leave an empty directory behind.
+    """
     with src.open(newline="", encoding="utf-8-sig") as handle:
         first = handle.readline()
         delimiter = "\t" if "\t" in first else ","
@@ -117,8 +122,7 @@ def subset_delimited(src: Path, dest: Path, wanted: set[str]) -> tuple[int, set[
         rows = list(csv.reader(handle, delimiter=delimiter))
 
     if not rows:
-        dest.write_text("")
-        return 0, set()
+        return delimiter, [], set()
 
     header = rows[0]
     column = find_sample_column(header)
@@ -134,10 +138,20 @@ def subset_delimited(src: Path, dest: Path, wanted: set[str]) -> tuple[int, set[
         if sample in wanted:
             kept.append(row)
             seen.add(sample)
+    return delimiter, kept, seen
 
+
+def write_delimited(dest: Path, delimiter: str, rows: list[list[str]]) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("w", newline="", encoding="utf-8") as handle:
-        csv.writer(handle, delimiter=delimiter, lineterminator="\n").writerows(kept)
-    return len(kept) - 1, seen
+        csv.writer(handle, delimiter=delimiter, lineterminator="\n").writerows(rows)
+
+
+def subset_delimited(src: Path, dest: Path, wanted: set[str]) -> tuple[int, set[str]]:
+    """Filter one TSV/CSV into dest. Returns (rows kept, sample ids seen)."""
+    delimiter, rows, seen = filter_delimited(src, wanted)
+    write_delimited(dest, delimiter, rows)
+    return max(len(rows) - 1, 0), seen
 
 
 def subset_workbook(src: Path, dest: Path, wanted: set[str]) -> tuple[dict[str, int], set[str]]:
@@ -284,13 +298,16 @@ def subset_outputs(results: Path, out: Path, wanted: set[str], others: set[str],
                     skip(rel, "merged table, no sample column")
                     continue
 
+                # Filter first, write only if anything survived. Writing then
+                # deleting would leave an empty directory per other sample, and
+                # a tree full of empty sample directories reads as though every
+                # sample is present.
+                delimiter, rows, _ = filter_delimited(src, wanted)
+                if len(rows) <= 1:
+                    skip(rel, "no matching rows")
+                    continue
                 if not dry_run:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    rows, _ = subset_delimited(src, dest, wanted)
-                    if rows == 0:
-                        dest.unlink(missing_ok=True)
-                        skip(rel, "no matching rows")
-                        continue
+                    write_delimited(dest, delimiter, rows)
                     total += dest.stat().st_size
                 copied += 1
                 continue
@@ -299,6 +316,16 @@ def subset_outputs(results: Path, out: Path, wanted: set[str], others: set[str],
                 skip(rel, "belongs to another sample")
             else:
                 skip(rel, "not per-sample")
+
+    # Belt and braces: anything that still ended up empty goes, deepest first,
+    # so a directory emptied by this loop is removed in the same pass.
+    if not dry_run and out.is_dir():
+        for path in sorted(out.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            if path.is_dir():
+                try:
+                    path.rmdir()
+                except OSError:
+                    pass  # not empty, which is the normal case
 
     return copied, total, skipped, reasons
 
