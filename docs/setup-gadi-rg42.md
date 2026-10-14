@@ -72,9 +72,7 @@ which writes to
 `/scratch/rg42/myproject/raw_data/2025/B07/AGRF_CAGRF26050180_AAHJ2FTM5`.
 
 `DEST_ROOT` must be an absolute path, and you need write access to it. The
-`<YEAR>/<BATCH>/` levels are always added beneath it — if you do not want a
-year or batch level, pass whatever you do want as those two arguments, since
-they are just directory names.
+`<YEAR>/<BATCH>/` levels are always added beneath it.
 
 To control the last level too, pass a fourth argument:
 
@@ -86,6 +84,22 @@ DEST_ROOT=/scratch/rg42/myproject/raw_data \
   B07 \
   run1
 ```
+
+To copy into one folder of your choosing with nothing appended, use `--dest`
+instead. `YEAR` and `BATCH` are then not required:
+
+```bash
+/g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
+  --dest /scratch/rg42/anywhere/i/like \
+  user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5
+```
+
+which writes the delivery straight into `/scratch/rg42/anywhere/i/like`. The
+path is used exactly as given, is created if missing, and may be relative (it
+is resolved against the current directory). `DEST_DIR` is the environment
+variable equivalent. `DEST_ROOT`, `YEAR`, `BATCH` and `DEST_NAME` play no part
+when `--dest` is used, and passing them alongside it is an error rather than
+being silently ignored.
 
 Preview any of these before copying anything:
 
@@ -101,7 +115,8 @@ Useful notes:
 - `PROJECT` (default `rg42`) changes the default `DEST_ROOT` without replacing it
 - `RSYNC_RSH` sets a custom remote shell, for example `"ssh -p 2222"`
 - `RSYNC_ARGS` appends extra rsync arguments
-- `./scripts/download_agrf_to_gadi.sh` with no arguments prints the full usage
+- `--dest DIR` copies into `DIR` verbatim, bypassing the `DEST_ROOT/<YEAR>/<BATCH>/` tree
+- `./scripts/download_agrf_to_gadi.sh` with no arguments, or `--help`, prints the full usage
 
 Wherever you put it, that directory is what you pass as the first path to
 `submit gadi` — nothing downstream assumes the AGAR tree.
