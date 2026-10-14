@@ -120,14 +120,17 @@ only step you change** — everything after it is copy-paste.
 ### If you were given a training set
 
 ```bash
-export READS=/scratch/rg42/training/2026-10-12/jc9911/fastq
-export METADATA=/scratch/rg42/training/2026-10-12/jc9911/metadata
-export OUT=/scratch/rg42/training/2026-10-12/jc9911
+export READS=/scratch/rg42/training/2026-10-12/$USER/fastq
+export METADATA=/scratch/rg42/training/2026-10-12/$USER/metadata
+export OUT=/scratch/rg42/training/2026-10-12/$USER
 ```
 
-Your folder is named after your NCI login, so replace `jc9911` with your own
-username and the date with the one your trainer gives you. Your set's
-`START_HERE.txt` has these three lines already filled in.
+Your folder is named after your NCI login, and `$USER` fills that in by itself,
+so copy those three lines exactly as they are. The only part to check is the
+date, which must match the one your trainer gave you.
+
+Your set's `START_HERE.txt` has them filled in too, if you would rather paste
+from there.
 
 ### If you are running your own data
 
@@ -166,10 +169,11 @@ the two ends of each DNA fragment:
 
 ```bash
 ls $READS
+ls $READS | wc -l
 ```
 
-There are two files for every sample, so a one-sample training set shows two
-files and a four-sample set shows eight.
+There are two files for every sample, so a one-sample training set shows **2**
+and a four-sample set shows 8.
 
 **Your sample sheet.** This lists each sample and the organism the lab recorded
 for it:
@@ -180,16 +184,48 @@ cat $METADATA/*_samplesheet.txt
 
 ```text
 Sample name	Organism
-24GNB-1752	Escherichia coli
+24GNB-1745	Klebsiella pneumoniae
 ```
 
+A header row, then one row per sample. For a training set that is one row.
+
 The **sample name** is the part of the FASTQ filename before the first
-underscore. In `24GNB-1752_AAHHL2JM5_GTGCAGACAG-TACCATCCGT_L001_R1.fastq.gz`
-the sample name is `24GNB-1752`. The names in this sheet must match exactly, or
+underscore. In `24GNB-1745_AAHHL2JM5_CAGTGGCACT-TAACAATAGG_L001_R1.fastq.gz`
+the sample name is `24GNB-1745`. The names in this sheet must match exactly, or
 the pipeline cannot join your results to your metadata.
 
+**Cross-check the two against each other.** Rather than comparing by eye, there
+is a script for it:
+
+```bash
+/g/data/rg42/bactopia-workbench/scripts/validate_raw_data_samples.py \
+  --raw-dir $READS \
+  --metadata $METADATA/*_samplesheet.txt
+```
+
+```text
+samples on disk:       1
+samples in sheet:      1
+matched:               1
+on disk, not in sheet: 0
+in sheet, not on disk: 0
+
+OK: the raw data directory and the metadata sheet agree.
+```
+
+You want **`matched`** to equal your sample count and the last two lines to be
+`0`. The two failure modes it catches:
+
+- **on disk, not in sheet** — reads the pipeline will process but cannot label,
+  so they arrive in the results with no metadata
+- **in sheet, not on disk** — a row that will silently vanish from the workbook,
+  because there are no reads to process
+
+Both are easy to create by hand and hard to spot afterwards, which is why this
+is worth running before every real submission, not just this exercise.
+
 **Your results folder** is empty for now. Everything the run produces lands
-there.
+there, named after the folder — so `$USER` gives you `<your login>_results.xlsx`.
 
 ## Step 4: Check Everything Is Ready (Dry Run)
 
@@ -553,9 +589,9 @@ Delete the extra jobs with `qdel <jobid>`, using the IDs from `qstat -u $USER`.
 
 ```bash
 # set up (once per login) - the only lines you edit
-export READS=/scratch/rg42/training/2026-10-12/jc9911/fastq
-export METADATA=/scratch/rg42/training/2026-10-12/jc9911/metadata
-export OUT=/scratch/rg42/training/2026-10-12/jc9911
+export READS=/scratch/rg42/training/2026-10-12/$USER/fastq
+export METADATA=/scratch/rg42/training/2026-10-12/$USER/metadata
+export OUT=/scratch/rg42/training/2026-10-12/$USER
 
 # check, then submit
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
