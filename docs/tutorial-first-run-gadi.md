@@ -436,7 +436,7 @@ your trainer will give you instead — same data, same pipeline, already
 complete. Point `OUT` at it and every command below works unchanged:
 
 ```bash
-export OUT=<reference path from your trainer>
+export OUT=/scratch/rg42/training/2026-10-12/reference_results
 ```
 
 ### The two files worth opening
@@ -516,10 +516,13 @@ Your trainer has a reference run over the same samples. Same file names, same
 layout, so you can look at it exactly as you look at your own:
 
 ```bash
-export REF=<reference path from your trainer>
+export REF=/scratch/rg42/training/2026-10-12/reference_results
 ls $REF
 column -t -s $'\t' $REF/*_review_required.tsv | less -S
 ```
+
+Leave those files where they are rather than copying them — everyone is reading
+the same copy.
 
 One difference to expect: the number of `batch_bactopia_*` folders. Those come
 from the batch size, so a run covering more samples than yours is split into
