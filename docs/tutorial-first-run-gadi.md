@@ -144,6 +144,22 @@ Any readable path works for `READS` and `METADATA`; `OUT` needs to be somewhere
 you can write, normally under `/scratch/rg42`. It is created if it does not
 exist.
 
+> **If your delivery is not on Gadi yet**, bring it over first. `--dest` puts it
+> in whichever folder you name, and that folder is then your `READS`:
+>
+> ```bash
+> /g/data/rg42/bactopia-workbench/scripts/download_agrf_to_gadi.sh \
+>   --dest /scratch/rg42/myproject/B07_reads \
+>   user@source.example.org:/path/to/AGRF_CAGRF26050180_AAHJ2FTM5
+>
+> export READS=/scratch/rg42/myproject/B07_reads
+> ```
+>
+> Add `DRY_RUN=1` in front to see what it would copy without copying anything.
+> There is also a form that files the delivery into the shared
+> `AGAR/raw_data/<year>/<batch>/` tree, which is what the paths above show:
+> [docs/setup-gadi-rg42.md](setup-gadi-rg42.md).
+
 > **`OUT`'s folder name becomes your output filenames.** The workbook is the
 > folder's name plus `_results.xlsx`, so `.../2025/B07` gives `B07_results.xlsx`.
 > Avoid naming it `results`, or you get `results_results.xlsx`.
