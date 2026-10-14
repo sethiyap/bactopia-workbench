@@ -475,18 +475,55 @@ columns at the very end:
 
 ### Samples flagged for review
 
+A sample is flagged when what the sequencing data says disagrees with the
+organism recorded in your sample sheet. These rows are wide, so read them in
+columns rather than as raw text:
+
 ```bash
-cat $OUT/*_review_required.tsv
+column -t -s $'\t' $OUT/*_review_required.tsv | less -S
 ```
 
-A sample is flagged when the species the sequencing data points to disagrees
-with the organism recorded in your sample sheet. For a flagged sample, compare
-`bracken_*` (what the data says) against the `Organism` column (what the lab
-recorded) and decide which you trust.
+`less -S` stops lines wrapping; scroll sideways with the arrow keys and quit
+with `q`.
 
-An empty file, or no file at all, means nothing was flagged — which is the
-normal, good outcome. Your trainer may have deliberately mislabelled one sample
-so you can see this check fire.
+For each flagged row, read across these four:
+
+| Column | |
+|---|---|
+| `Organism` | what the lab recorded in your sheet |
+| `mlst_scheme` | the typing scheme MLST matched, which implies a genus |
+| `review_reason` | why it was flagged |
+| `mlst_review_note` | what the review step concluded |
+
+A genus mismatch looks like a sheet saying *Escherichia coli* while
+`mlst_scheme` names a *Klebsiella* scheme. Whether the sheet or the data is
+wrong is a judgement call — the pipeline flags it rather than deciding.
+
+**An empty file, or no file at all, means nothing was flagged.** That is the
+normal, good outcome, not a sign something went missing.
+
+Two things worth knowing about flagged samples:
+
+- **A flag is not a failure.** The run completes, the sample is processed, and
+  the results are all there. It is marked for a human to look at, nothing more.
+- Your trainer may have **deliberately mislabelled one sample** so the check
+  fires for somebody. If yours is flagged, ask them to check it against the
+  answer key before assuming your data is at fault.
+
+### Comparing against a finished run
+
+Your trainer has a reference run over the same samples. Same file names, same
+layout, so you can look at it exactly as you look at your own:
+
+```bash
+export REF=<reference path from your trainer>
+ls $REF
+column -t -s $'\t' $REF/*_review_required.tsv | less -S
+```
+
+One difference to expect: the number of `batch_bactopia_*` folders. Those come
+from the batch size, so a run covering more samples than yours is split into
+more batches. Everything else should line up.
 
 ## Step 8: Copy Results Off Gadi
 
