@@ -293,6 +293,25 @@ The same command, without `--dry-run`:
   50
 ```
 
+### What you are typing
+
+A whole run is one command — a backend, then three folders:
+
+```text
+bactopia-workbench submit gadi [OPTIONS] INPUT_SOURCE METADATA_DIR RESULTS_ROOT [BATCH_SIZE]
+```
+
+| Part | | |
+|---|---|---|
+| `submit gadi` | the backend | Gadi's PBS scheduler |
+| `INPUT_SOURCE` | `$READS` | folder of FASTQ or FASTA files |
+| `METADATA_DIR` | `$METADATA` | folder holding the `*_samplesheet.txt` |
+| `RESULTS_ROOT` | `$OUT` | where batches, TSVs and the workbook go |
+| `BATCH_SIZE` | `50` | optional: samples per job, default 50 |
+
+Run it from any folder — there is no `cd` to get right, because all three paths
+are absolute.
+
 This returns **almost immediately**. That is expected and does not mean it has
 finished — it has handed your work to the scheduler and printed the job IDs.
 The analysis itself takes much longer.
@@ -630,8 +649,36 @@ cat $OUT/*_review_required.tsv
 
 ## When You Run A Real Batch
 
-This tutorial uses a handful of samples. When you come to run a real delivery —
-tens or hundreds of samples — add **one** setting:
+### Other kinds of input
+
+This tutorial uses paired-end Illumina reads, which is the default and needs no
+flag. The same command takes other input types by adding one option — only the
+input folder and the flag change:
+
+```bash
+# Illumina paired-end reads (the default, no flag needed)
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
+  /path/to/fastqs /path/to/metadata /path/to/results 50
+
+# ONT reads, one file per sample
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
+  --input-type ont \
+  /path/to/ont_fastqs /path/to/metadata /path/to/results_ont 20
+
+# Assemblies you already have, as FASTA
+/g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
+  --input-type assembly \
+  /path/to/assemblies /path/to/metadata /path/to/results 50
+```
+
+The metadata sheet is required for every input type, and its sample names must
+still match. See [docs/input-formats.md](input-formats.md) for the naming rules
+each type expects.
+
+### Running many samples at once
+
+When you come to run a real delivery — tens or hundreds of samples — add
+**one** setting:
 
 ```bash
 export RUN_TOOLS_PARALLEL=1
