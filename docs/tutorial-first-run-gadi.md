@@ -72,10 +72,10 @@ Your trainer may have done this for you already. Check:
 ls /scratch/rg42/$USER/singularity_cache | wc -l
 ```
 
-**A number around 30** means you are set up — carry on to Step 2.
+**If it printed a number around 30**, you already have them. Skip ahead to
+Step 2.
 
-**`0`, or `No such file or directory`**, means you need to copy them in. Four
-lines:
+**If it printed `0`, or `No such file or directory`**, run these four lines:
 
 ```bash
 SHARED=/scratch/rg42/training/2026-10-12/shared/singularity_cache
