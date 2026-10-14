@@ -46,11 +46,48 @@ Login nodes are for small commands only. The actual analysis runs on **compute
 nodes**, which you never log into directly: you *submit* work to them and the
 scheduler runs it when resources are free. That is what Step 5 does.
 
-Go to your home directory:
+Find out where you are:
 
 ```bash
-cd ~
+pwd
 ```
+
+That prints something like `/home/562/abc123` — your home directory on Gadi.
+The number in the middle is your project group and differs between people, so
+there is no single path that works for everyone. Worth noting yours now; it is
+where you will land every time you log in.
+
+Nothing in this tutorial needs you to be in a particular directory. Every path
+is given in full, so the commands work from wherever you happen to be.
+
+### One-time check: do you have the software containers?
+
+The pipeline runs its tools inside pre-built container images. Gadi's compute
+nodes have **no internet access**, so they cannot download these themselves —
+the images have to be sitting in your own cache before you submit anything.
+
+Your trainer may have done this for you already. Check:
+
+```bash
+ls /scratch/rg42/$USER/singularity_cache | wc -l
+```
+
+- **A number around 30** — you are set up, carry on to Step 2.
+- **`0`, or `No such file or directory`** — run the four lines in the
+  `STEP 0` section of your own `START_HERE.txt`, which has the correct path for
+  this session filled in:
+
+  ```bash
+  cat <your set folder>/START_HERE.txt
+  ```
+
+  They take a second and use no extra disk — they point at images that already
+  exist rather than copying them, and are safe to run twice.
+
+This matters because a missing cache does **not** stop your run from being
+submitted. The dry run in Step 4 passes, the jobs queue happily, and the
+failure only appears part-way through with a container error. Checking now
+saves an afternoon of confusion.
 
 ## Step 2: Set Your Three Paths
 
