@@ -5,3 +5,10 @@ config/sites/*.local.env
 # (contains files >100MB that GitHub would reject). See docs/bactopia-setup.md.
 bactopia_datasets_custom/
 agar_bactopia_datasets.tar.gz
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Editor settings
+.vscode/
