@@ -229,9 +229,11 @@ there, named after the folder — so `$USER` gives you `<your login>_results.xls
 
 ## Step 4: Check Everything Is Ready (Dry Run)
 
-Before submitting anything, run the same command with `--dry-run`. This checks
-your inputs, the reference databases and the software, then stops without
-queuing any work. It takes a minute or two.
+Always dry-run first. It checks your whole setup **without queuing a single
+job**, so there is no cost and nothing to undo. It takes a minute or two.
+
+Run it from a login node — which is where you already are, and any folder will
+do, since every path below is absolute:
 
 ```bash
 /g/data/rg42/bactopia-workbench/bin/bactopia-workbench submit gadi \
@@ -247,6 +249,15 @@ Reading the three paths: **where the reads are**, **where the sample sheet is**,
 into one job. A training set is well under that, so everything goes into a
 single batch.
 
+### What it checks
+
+- The site config, and every path that config points to
+- Your sample sheet, and that each input sample has a row in it
+- Manifest (FOFN) creation, or reuse of one already there
+- Key dependencies, including the datasets cache (`DATASETS_CACHE`), the
+  Kraken2 database and the tools used to build the final workbook
+- The PADLOC install and database, if you added `--padloc`
+
 You will see many lines like:
 
 ```text
@@ -254,11 +265,19 @@ You will see many lines like:
 [INFO] DRY RUN PASS: KRAKEN2_DB found: /g/data/rg42/bactopia/kraken_indices/...
 ```
 
-**What to look for at the very end:**
+### Reading the result
 
-- `DRY RUN PASS` lines are good — each is one thing confirmed present.
-- `DRY RUN WARN` is usually fine. It means an optional step will be skipped.
-- `DRY RUN FAIL` must be fixed before you continue. Show it to your trainer.
+- `DRY RUN PASS` — one thing confirmed present. You want a lot of these.
+- `DRY RUN WARN` — usually fine. An optional step will be skipped.
+- `DRY RUN FAIL` — must be fixed before you continue.
+
+**If it passes:** run the same command again without `--dry-run`. That is
+Step 5.
+
+**If it fails:** fix the item it names and dry-run again. Nothing was queued,
+so there is nothing to clean up and no harm in repeating it as often as you
+like. If the failure is not something you can fix — a missing database, a
+broken path in the shared config — show the line to your trainer.
 
 Do not go to Step 5 until the dry run reports no failures.
 
