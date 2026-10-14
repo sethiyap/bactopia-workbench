@@ -72,17 +72,34 @@ Your trainer may have done this for you already. Check:
 ls /scratch/rg42/$USER/singularity_cache | wc -l
 ```
 
-- **A number around 30** — you are set up, carry on to Step 2.
-- **`0`, or `No such file or directory`** — run the four lines in the
-  `STEP 0` section of your own `START_HERE.txt`, which has the correct path for
-  this session filled in:
+**A number around 30** means you are set up — carry on to Step 2.
 
-  ```bash
-  cat <your set folder>/START_HERE.txt
-  ```
+**`0`, or `No such file or directory`**, means you need to copy them in. Four
+lines:
 
-  They take a second and use no extra disk — they point at images that already
-  exist rather than copying them, and are safe to run twice.
+```bash
+SHARED=/scratch/rg42/training/2026-10-12/shared/singularity_cache
+MINE=/scratch/rg42/$USER/singularity_cache
+mkdir -p $MINE
+rsync -a --link-dest=$SHARED $SHARED/ $MINE/
+```
+
+Only the first line changes between sessions — the date in it must match the
+one your trainer gave you. Your own `START_HERE.txt` has it filled in already:
+
+```bash
+cat <your set folder>/START_HERE.txt
+```
+
+`$USER` is your own login and fills itself in, so the other three lines are
+copied as they are.
+
+This takes a second and uses no extra disk — it points at images that already
+exist rather than copying them — and it is safe to run twice. Check it worked:
+
+```bash
+ls $MINE | wc -l
+```
 
 This matters because a missing cache does **not** stop your run from being
 submitted. The dry run in Step 4 passes, the jobs queue happily, and the
